@@ -1,0 +1,1168 @@
+---
+title: "Project CO2 - Bayesian Statistics"
+output: html_notebook
+---
+
+# Project tasks
+
+1.  Consider a regression model to explain C02 emission with the other variables. You can transform some of the variables.
+
+2.  Additional questions: C02 and GDP are strongly dependent? Historically, CO2 emissions have been strongly correlated with how much money we have. This is particularly true at low-to-middle incomes. The richer we are, the more CO2 we emit. This is because we use more energy – which often comes from burning fossil fuels. This relationship is still true at higher incomes?
+
+3.  In addition you can: consider and compare various years. Consider the time as a covariate. Add more covariates (taking them from the web). Consider time series models.
+
+# Datasets & Outline
+
+We have included two main datasets in our analysis.
+
+-   **Dataset 1** encompasses annual CO2 emissions for each year from 1900 to 2022. This dataset provides a comprehensive perspective on CO2 emissions over more than a century, allowing us to identify long-term trends and patterns.
+
+-   **Dataset 2** is more granular and concentrates on the years 2006 to 2009. It includes various features such as energy use per capita, GDP, population, CO2 emissions per capita, the percentage of low-carbon energy in total energy production, urbanization levels, and internet usage. This dataset allows for a detailed analysis of specific factors that may influence CO2 emissions during a recent, focused timeframe.
+
+Our analysis will focus on:
+
+1.  **Long-Term Trends**: Using Dataset 1, we will examine how CO2 emissions have evolved over the past century, identifying key periods of increase or decrease and correlating these with historical events.
+
+2.  **Recent Factors Influencing CO2 Emissions**: With Dataset 2, we will analyze the impact of socio-economic and technological factors on CO2 emissions from 2006 to 2009. This includes investigating the relationship between CO2 emissions and variables such as energy consumption, economic activity, urbanization, and the adoption of low-carbon energy sources.
+
+3.  **Comparative Analysis**: We will compare findings from both datasets to understand how historical trends relate to more recent developments.
+
+By integrating these two datasets, our analysis aims to provide a comprehensive understanding of CO2 emissions over time and the key factors driving changes in recent years.
+
+# Dataset 1
+
+**Sources:**
+
+<https://ourworldindata.org/grapher/annual-co2-emissions-per-country>
+
+**Short description:**
+
+Human emissions of carbon dioxide and other greenhouse gases between 1900 and 2022.
+
+Data have been selected for various nations and various years.
+
+-   **country**: name of the country.
+-   **Code**: the code of each country
+-   **Year**: year.
+-   **AnnualCO2**: Annual CO2 emissions. [billion tons] (rescaled from tons)
+
+```{r}
+# Loading the data
+CO2_full <- read.csv("Data/annual-co2-emissions-per-country.csv")
+CO2_full$AnnualCO2 = CO2_full$AnnualCO2 /10^9
+head(CO2_full)
+
+
+# We filter the dataset for the world data after 1900
+world_data <- CO2_full[CO2_full$country == 'World' & CO2_full$Year > 1900,]
+
+# Plot
+plot(world_data$Year, world_data$AnnualCO2, type='l', col='darkgreen', ylab="Annual CO2 (billion t)", main="CO2 Emissions for the World", xlab="Year")
+points(world_data$Year, world_data$AnnualCO2, col='darkgreen', pch=16, cex=0.5)
+```
+
+The data presents a clear exponential trend, for this reason we will try to analyse the **logarithm** of the data and see if we can find some interesting trends.
+
+We will transform the CO2 in log_CO2 and also compute the **increment in log_CO2** i.e $$
+x_t :=\log(y_{t+1})-\log(y_t)
+$$
+
+```{r}
+# Creating the data
+CO2_log = log(world_data$AnnualCO2, 10)
+n1 = length(CO2_log)
+
+delta_logdata = CO2_log[2:n1] - CO2_log[1:n1-1]
+n2 = length(delta_logdata)
+
+# Years 
+year = world_data$Year
+
+
+# Plots
+# Log data
+plot(year, CO2_log, type='l', col='darkgreen', ylab="log(Annual CO2)", main="log(CO2)", xlab="Year")
+points(year, CO2_log, col='darkgreen', pch=16, cex=0.5)
+
+# Delta log data
+plot(year[1:length(delta_logdata)], delta_logdata, type='l', ylab="Delta log-co2", main="Delta log-co2", xlab="Year")
+```
+
+## Change point model for the variance
+
+From the delta log-CO2 it is clear from the data that some kind of **shift on the variance** is happening.
+
+To analyse this in more detail we will fit a change point model on the variance to our data.
+
+We assume for our data a Gaussian likelihood:$$
+y_t \sim \mathcal{N}(\mu_0,\sigma_t^2).
+$$An event occurs at a random unobserved time $\tau$, the so-called "change point".\
+This is reflected in the assumption $$
+\sigma_t^2 =\sigma_{1}^2 \quad t < \tau
+$$ and $$
+\sigma_t^2 =\sigma_{2}^2 \quad t \geq \tau
+$$ where $\sigma_1^2, \sigma_2^2$ are unknown.
+
+We assume the following priors: $$
+\begin{split}
+& y_t \sim \mathcal{N}(\mu_0,\sigma_t^2)\\
+& \sigma_t=\sigma_{1}^2 \{t < \tau \} + \sigma_2^2 \{ t \geq \tau\} \\
+& \tau \sim \mathcal{U}(0,M) \\
+& \mu_0 \sim \mathcal{N}(0,100) \\
+& \frac{1}{\sigma_i^2}  \sim \mathcal{G}(0.001, 0.001)  \  &i \in [1, 2]
+\end{split}
+$$ $M$ is a parameter that indicated the number of datapoints.
+
+In particular we choose the priors for $\mu_0$ and $\frac{1}{\sigma_i^2}$ to be weakly informative.
+
+```{r}
+library(rjags)
+library(bayesplot)
+library(jagsUI)
+library(loo)
+
+# change-point model
+modelChangePoint <-
+"model{
+  # Likelihood
+  for(i in 1:n){
+    x[i] ~ dnorm(mu, sinv_CP[i])
+    sinv_CP[i] <- sinv[J[i]] 
+    J[i] <- d[i] + 1         # move to (0,1) in (1,2)
+
+  }
+  
+  # Mean change
+  for(t in 1:n){
+    d[t] <- step(Tau - t)   
+              # 0 if (agument < 0), 1 otherwise  
+              # Probabilities of the changing point to have happened
+  }
+  
+  # Prior for d[i]
+  Tau ~ dunif(1, n+10)
+  
+  # Prior for beta
+  mu ~ dnorm(0, 0.01) 
+  sinv[1] ~ dgamma(0.001, 0.001)   # Non informative
+  sinv[2] ~ dgamma(0.001, 0.001)
+  # sinv[1] ~  dunif(0, 100000)   # Non informative
+  # sinv[2] ~  dunif(0, 100000)
+  
+}"
+
+
+
+# Data
+myData = list(x=delta_logdata, n=length(delta_logdata)) 
+
+# Jags
+outputmcmcCP <- jags(model.file=textConnection(modelChangePoint),
+                     data = myData,
+                     parameters.to.save = c("mu", "sinv_CP", "Tau","J"), 
+                     n.adapt=1000, n.iter=20000, n.chains = 2, n.burnin = 2000)
+
+```
+
+```{r}
+# Output
+outputmcmcCP
+```
+
+```{r}
+# Trace and density
+plot(outputmcmcCP$samples[,c("sinv_CP[10]")], main="posterior sinv_CP[10]")
+plot(outputmcmcCP$samples[,c("sinv_CP[90]")], main="posterior sinv_CP[90]")
+
+```
+
+```{r}
+# Autocorrelation function:
+autocorr.plot(outputmcmcCP$samples[,c("sinv_CP[10]")], main= "sinv_CP[10] ACF")
+autocorr.plot(outputmcmcCP$samples[,c("sinv_CP[90]")], main= "sinv_CP[90] ACF")
+```
+
+```{r}
+
+# Selecting the taus
+tau_samples = outputmcmcCP$samples[[1]][, "Tau"]
+
+# Calculate the mean
+tmean <- mean(tau_samples)
+
+# Calculate the 2.5% quantile
+q1 <- quantile(tau_samples, probs = 0.05)
+
+# Calculate the 97.5% quantile
+q2 <- quantile(tau_samples, probs = 0.95)
+
+
+# Finding the year corresponding to qi
+year_q1 = year[floor(q1)]
+year_q2 = year[floor(q2)]
+year_tmean = year[floor(tmean)]
+
+
+
+# Plot 
+plot(year[1:length(delta_logdata)], delta_logdata, type='l', ylab="Delta log-co2", main="Delta log-co2", xlab="Year")
+
+# lines for the change point
+abline(v=year_tmean, col="red", lwd=1.5)
+abline(v=year_q1, col="red", lwd=1.5, lty = 3)
+abline(v=year_q2, col="red", lwd=1.5, lty = 3)
+
+
+
+# Create a data frame to print the years
+df <- data.frame(
+  q1 = year_q1,
+  Mean = year_tmean,
+  q2 = year_q2
+)
+colnames(df) <- c("5%", "Mean", "95%")
+
+
+# Print the data frame
+print(df)
+```
+
+**Our analysis of the CO2 emissions data suggests a potential shift in the variance of the emission around 1951. With 90% confidence, we can say this shift likely occurred between 1949 and 1956.** This timeframe is particularly interesting because it coincides with several major events that could be linked to this trend:
+
+-   **The Marshall Plan (1948):** This large-scale U.S. program aimed to rebuild Europe after World War II. It likely spurred economic activity and potentially increased CO2 emissions.
+
+-   **The Post-War Economic Boom (1945-1973):** This period of rapid economic growth across the globe could have significantly contributed to rising emissions.
+
+One possible interpretation of these findings is that improved economic conditions led to **both a decrease in the variability and an increase in the overall quantity of emissions**. This suggests a shift towards more consistent, but higher, emissions during this time.
+
+**Credible Interval:** When you specify a range between the 5th percentile and the 95th percentile of the posterior distribution, you are describing a 90% credible interval. A credible interval gives a range within which the true parameter is believed to lie with a certain probability, according to the posterior distribution.
+
+## Change Point model for the mean
+
+**Given the potential shift in CO2 emission patterns around 1951, a next step could be to investigate if there are further changes in trend following this period.** The Post-War Economic Boom ended with a recession (1973-1975), followed by an even deeper one in the early 1980s. This historical context prompts the question: **Can we detect another change point in the CO2 emissions data after 1951?**
+
+For the next analysis we will try to fit to our data after the first shift (1951) with a change point model on the mean of the delta log-co2. (i.e. we will analyse the speed of the increase of CO2).
+
+We assume the following priors:$$
+\begin{split}
+& y_t  \stackrel{ind}{\sim} \mathcal{N}(\mu_t,\sigma_{0}^2)\\
+& \mu_t=m_{1} \{t < \tau \} + m_2 \{ t \geq \tau\} \\
+& \tau \sim \mathcal{U}(0,M) \\
+& \mu_1 \sim \mathcal{N}(5,100) \\
+& \mu_2 \sim \mathcal{N}(0,100) \\
+& \frac{1}{\sigma^2} \sim \mathcal{U}(0, 100000)
+\end{split}
+$$$M$ is a parameter that indicated the number of datapoints.
+
+In particular we choose the priors for $\mu_0$ and $\frac{1}{\sigma^2}$ to be weakly informative.
+
+```{r}
+# Filtering for data after the change point
+world_data_after1951 <- world_data[world_data$Year > 1951,]
+
+# Creating the data
+CO2_log_51 = log(world_data_after1951$AnnualCO2, 10)
+n1 = length(CO2_log_51)
+
+delta_logdata_51 = CO2_log_51[2:n1] - CO2_log_51[1:n1-1]
+n2 = length(delta_logdata)
+
+# Years 
+year = world_data_after1951$Year
+
+
+# Plots
+plot(year, CO2_log_51, type='l', col='darkgreen', ylab="log(Annual CO2)", main="log(CO2)", xlab="Year")
+points(year, CO2_log_51, col='darkgreen', pch=16, cex=0.5)
+
+# Delta log data
+plot(year[1:length(delta_logdata_51)], delta_logdata_51, type='l', ylab="Delta log-co2", main="Delta log-co2", xlab="Year")
+```
+
+```{r}
+# change-point model
+modelChangePoint_mean <-
+"model{
+  # Likelihood
+  for(i in 1:n){
+    x[i] ~ dnorm(mu[i], sinv)
+    mu[i] <- m[J[i]] 
+    J[i] <- d[i] + 1         # move to (0,1) in (1,2)
+  }
+  
+  # Mean change
+  for(t in 1:n){
+    d[t] <- step(Tau - t)   # probabilities of the changing point to have happened
+  }
+  
+  # Prior for d[i]
+  Tau ~ dunif(1, n+10)
+  
+  # Prior for beta
+  m[1] ~ dnorm(5, 0.01)
+  m[2] ~ dnorm(0, 0.01)
+  sinv ~ dunif(0, 100000)         # This is more stable that a Gamma
+  
+}"
+
+
+# Data
+myData = list(x=delta_logdata_51, n=length(delta_logdata_51)) 
+
+# Jags
+outputmcmcCP <- jags(model.file=textConnection(modelChangePoint_mean),
+                     data = myData,
+                     parameters.to.save = c("mu", "sinv", "Tau","J"), 
+                     n.adapt=1000, n.iter=20000, n.chains = 2, n.burnin = 2000, 
+                     n.thin = 1)
+
+
+```
+
+```{r}
+# Output
+outputmcmcCP
+
+# Trace and density
+plot(outputmcmcCP$samples[,c("sinv")], main="posterior sinv")
+plot(outputmcmcCP$samples[,c("mu[5]")], main="posterior mu[5]")
+plot(outputmcmcCP$samples[,c("mu[50]")], main="posterior mu[50]")
+
+# Autocorrelation
+autocorr.plot(outputmcmcCP$samples[,c("sinv")], main= "sinv ACF")
+autocorr.plot(outputmcmcCP$samples[,c("mu[5]")], main="mu[5] ACF")
+autocorr.plot(outputmcmcCP$samples[,c("mu[50]")], main="mu[50] ACF")
+```
+
+```{r}
+# Selecting the tau samples
+tau_samples = outputmcmcCP$samples[[1]][, "Tau"]
+
+# Calculate the mean
+tmean <- mean(tau_samples)
+
+# Calculate the 2.5% quantile
+q1 <- quantile(tau_samples, probs = 0.05)
+
+# Calculate the 97.5% quantile
+q2 <- quantile(tau_samples, probs = 0.95)
+
+
+# Finding the year corresponding to qi
+year_q1 = year[floor(q1)]
+year_q2 = year[floor(q2)]
+year_tmean = year[floor(tmean)]
+
+
+
+# Plot 
+plot(year[1:length(delta_logdata_51)], delta_logdata_51, type='l', ylab="Delta log-co2", main="Delta log-co2", xlab="Year")
+
+# lines for the change point
+abline(v=year_tmean, col="red", lwd=1.5)
+abline(v=year_q1, col="red", lwd=1.5, lty = 3)
+abline(v=year_q2, col="red", lwd=1.5, lty = 3)
+
+
+# Sampled mean
+ssCP2 = summary(outputmcmcCP)
+n2 = length(delta_logdata_51)
+points(year[1:n2], ssCP2[1:n2,"mean"], col="green", pch=16, cex=0.6)
+
+
+
+# Create a data frame to print the years
+df <- data.frame(
+  q1 = year_q1,
+  Mean = year_tmean,
+  q2 = year_q2
+)
+colnames(df) <- c("5%", "Mean", "95%")
+
+
+# Print the data frame
+print(df)
+```
+
+As we can see from our analysis we can indeed spot a change in the mean of our model around 1973, **with** **a 90% chance this change occurred between 1970 and 1978.**
+
+An interpretation of this finding suggests that the worsened economic conditions caused by the economic recessions of that era may have contributed to a slowdown in CO2 emissions growth
+
+### Regressions over the change points
+
+**Our analysis identified two potential turning points in the CO2 emission trend: 1951 and 1973.** To gain a clearer visual understanding of these shifts, we'll segment the data into three periods: **before**, **between**, and **after** these critical years. **By fitting regression lines to the log of CO2 emissions for each period, we can directly visualize the changes** in the emission trajectory.
+
+```{r}
+# Adding a columns for the log data
+world_data$CO2_log = CO2_log
+
+# Filtering for data up untile 1975 (End of the Post-War Economic Boom)
+world_data_before1973 <- world_data[world_data$Year < 1973,]
+world_data_after1973 <- world_data[world_data$Year > 1973,]
+
+
+# Splitting the data in 'before' and 'after' the change-point
+world_data_before1951 <- world_data_before1973[world_data_before1973$Year < 1951,]
+world_data_after1951 <- world_data_before1973[world_data_before1973$Year > 1951,]
+
+
+# Fitting some linear models
+world_data_before1951.lm = lm(CO2_log ~ Year, data = world_data_before1951)
+world_data_after1951.lm = lm(CO2_log ~ Year, data = world_data_after1951)
+world_data_after1973.lm = lm(CO2_log ~ Year, data = world_data_after1973)
+
+#Plots
+plot(world_data$Year, world_data$CO2_log, type='l', col='darkgreen', ylab="log(Annual CO2)", main="log(CO2)", xlab="Year")
+points(world_data$Year, world_data$CO2_log, col='darkgreen', pch=16, cex=0.5)
+
+# Lines
+beta_before_1951 = coef(world_data_before1951.lm)
+beta_after_1951 = coef(world_data_after1951.lm)
+beta_after_1973 = coef(world_data_after1973.lm)
+abline(beta_before_1951, col='red', lty=3)
+abline(beta_after_1951, col='green', lty=3)
+abline(beta_after_1973, col='blue', lty=3)
+
+
+# Legend
+legend("topleft", legend=c("Before 1951", "Between 1951 and 1973", "After 1973"), col=c("red", "green", "blue"), lty=3)
+
+
+
+
+# Plot 2
+plot(world_data$Year, world_data$AnnualCO2, type='l', col='darkgreen', ylab="Annual CO2 (billion t)", main="CO2 Emissions for the World", xlab="Year")
+points(world_data$Year, world_data$AnnualCO2, col='darkgreen', pch=16, cex=0.5)
+
+# # Add a vertical line in the two change points
+abline(v = 1951, col = "red", lwd = 1, lty = 3)
+abline(v = 1973, col = "green", lwd = 1, lty = 3)
+
+legend("topleft", legend=c("1951", "1973"), col=c("red", "green"), lty=3)
+```
+
+## AR(1) model - Time series prediction
+
+Building on the identified change points in CO2 emissions, a crucial next step is to explore what lies ahead.
+
+Can this knowledge be used to predict when we might reach a **critical level of CO2** emissions that would push global temperatures **1.5°C** above pre-industrial levels?
+
+The current estimate (2023) for the world's remaining carbon budget for a 50% chance to stay under 1.5 °C (2.7 °F) is **250 gigatonnes CO2**.
+
+We will carry on this analysis by fitting an **AR(1)** model with parameters $\mu,\alpha$ and $\sigma^2$ to the data after 1978 (95% that the change point has happened).
+
+We assume the following priors: $$ 
+\begin{split} 
+& \alpha \sim \mathcal{U}(-1,1)  \\ 
+& \mu\sim \mathcal{N}(0,10)  \\ 
+&  \tau=\frac{1}{\sigma^2} \sim \mathcal{G}(0.001,0.001)   \\ 
+\end{split}
+$$
+
+In particular we choose the priors for $\mu$ and $\frac{1}{\sigma^2}$ to be weakly informative.
+
+```{r}
+# Ar(1)
+modelAR.string <-"model {
+  ## parameters: alpha, tau, m0
+  # likeliohood
+  mu[1] <- Y[1]
+
+  for (i in 2:N) {
+    Y[i] ~ dnorm(mu[i], tau)
+    mu[i] <- m0 + alpha * Y[i-1]
+  }
+
+  # prediction out of sample
+  ypOut[1] = Y[N]                   # The first sample is Y[N]!!!
+  ypOut[2] ~ dnorm(m0 + alpha * Y[N], tau)
+  for(k in 3:Npred){
+    ypOut[k] ~ dnorm(m0 + alpha * ypOut[k-1], tau)
+  }
+
+
+  # prior
+  # alpha ~ dnorm(0.0, 1)
+  alpha ~ dunif(-1, 1)
+  tau ~ dgamma(0.001, 0.001)        # weakly informative prior
+  m0 ~ dnorm(0.0, 0.1)
+  sigma2 <- 1 / tau
+}"
+
+
+
+# Filtering the data
+world_data_after1978 <- world_data[world_data$Year > 1978,]
+
+CO2_log_78 = log(world_data_after1978$AnnualCO2, 10)
+n1 = length(CO2_log_78)
+
+delta_logdata_78 = CO2_log_78[2:n1] - CO2_log_78[1:n1-1]
+n2 = length(delta_logdata_78)
+
+# Years 
+year_78 = world_data_after1978$Year
+
+
+
+# Parameters
+Npred = 9 + 1         # horizon for out-of-sample prediction
+
+
+
+line_data <- list("Y"=delta_logdata_78, "N" = length(delta_logdata_78), "Npred"=Npred)
+
+outputmcmcAR <- jags(model.file=textConnection(modelAR.string),
+                     data = line_data,
+                     parameters.to.save = c('alpha', "sigma2","m0","ypOut", "tau"),
+                     n.adapt=1000, n.iter=20000, n.chains = 2, n.burnin = 2000, 
+                     n.thin = 5)
+```
+
+```{r}
+# Output
+outputmcmcAR
+
+
+# Trace and density
+plot(outputmcmcAR$samples[,c('alpha')], main="posterior alpha")
+plot(outputmcmcAR$samples[,c('sigma2')], main="posterior sigma2")
+plot(outputmcmcAR$samples[,c('m0')], main="posterior m0")
+plot(outputmcmcAR$samples[,c('tau')], main="posterior tau")
+
+
+# Autocorrelation
+autocorr.plot(outputmcmcAR$samples[,c('alpha')], main= "alpha ACF")
+autocorr.plot(outputmcmcAR$samples[,c('sigma2')], main= "sigma2 ACF")
+autocorr.plot(outputmcmcAR$samples[,c('m0')], main= "m0 ACF")
+```
+
+```{r}
+# Out of sample prediction
+yp_pred = outputmcmcAR$mean$ypOut         # Here 'yp_pred' is the 'delta-log'
+q1_pred = outputmcmcAR$q2.5$ypOut         # Credible interval
+q2_pred = outputmcmcAR$q97.5$ypOut
+
+# Years for prediction
+new_years <- seq(2021, 2021 + Npred - 1)
+
+
+# Plots
+plot(year_78[1:length(delta_logdata_78)], delta_logdata_78, type='l', xlim = c(min(year_78), 2030), ylab="Delta log-co2", main="Delta log-co2 prediction", xlab="Year")
+lines(new_years, yp_pred, pch="*", col="darkorange")
+abline(v=min(new_years), col="orange", lty = 3)
+# lines(new_years, q1_pred, type="l", col="orange", lwd = 1.5)
+# lines(new_years, q2_pred, type="l", col="orange", lwd = 1.5)
+
+legend("bottomleft", legend=c("Prediction"), col=c("darkorange"), lty=1)
+
+```
+
+```{r}
+# Reversing the delta-log relation
+delta_log_predicted = yp_pred[2:(Npred)]    # discard the first one (last data point)
+last_log_point = world_data$CO2_log[121]
+
+log_yp_pred <- array(0, dim = c(length(delta_log_predicted)))
+log_yp_pred[1] = last_log_point + delta_log_predicted[1]
+
+# calculating log_yp_pred
+for (i in seq(length(delta_log_predicted) - 1)){
+  log_yp_pred[i+1] = log_yp_pred[i] + delta_log_predicted[i+1]
+}
+
+# Final values in Billions of tons
+yp = 10^log_yp_pred
+
+
+# Years for AnnualCo2
+new_years_p = new_years[2:length(new_years)] + 1   # remove the first and shift by 1
+
+
+
+# Calculating the critical year
+CO2_bucket = 250
+i = 0
+while (CO2_bucket > 0){
+  i = i+1
+  critical_year = new_years_p[i]
+  CO2_bucket = CO2_bucket - yp[i]
+
+
+}
+
+
+
+# Plots
+plot(world_data$Year, world_data$AnnualCO2, type='l', col='darkgreen', ylab="Annual CO2 (billion t)", main="CO2 Emissions for the World", xlab="Year", xlim = c(min(world_data$Year), 2030), ylim = c(min(world_data$AnnualCO2), 42))
+points(world_data$Year, world_data$AnnualCO2, col='darkgreen', pch=16, cex=0.5)
+
+# Prediction
+lines(new_years_p, yp, pch="*", col="darkorange")
+points(new_years_p, yp, pch=16, cex=0.5, col="darkorange")
+points(critical_year, yp[i], pch=1, cex=1, lwd=2, col="red")
+
+# Critical year line
+# abline(v=critical_year, col="red", lty = 3)
+
+# Add a legend
+legend("topleft", legend=critical_year, pch=1, col="red", pt.cex=1, pt.lwd=2)
+```
+
+Based on our analysis, continuing the current emissions trajectory could push us towards **1.5°C** warming by **2029.**
+
+## White Noise Model with switching variance
+
+In our previous analyses, we have examined the trends in the increase of CO2 emissions.
+
+Now we want to ask a different question: **can we detect global crisis and major worldwide events by looking at CO2 emissions alone?**
+
+**Do they cause a noticeable variance in the trend of CO2 emissions?**
+
+We will carry on this analysis by fitting a white noise model with switching variance on the increment of the log of CO2 emissions.
+
+We will split our data by leveraging the change points discovered in two sub-datasets: years before **1949** (5% quantile of the change point on the variance) and after **1978** (95% quantile of the change point on the mean).
+
+The model is as follows:$$
+x_t :=\log(y_{t+1})-\log(y_t)
+$$ and we assume that $$
+x_t \stackrel{iid}{\sim} \mathcal{N}(\mu,\sigma_t^2)
+$$ with $$
+\sigma_t^{-2}=\beta_1+\beta_2 \delta_t \qquad \delta_t \sim Ber(p)
+$$
+
+We assume the following priors:$$ 
+\begin{split} 
+& \beta_1 \sim \mathcal{G}(0.001, 0.001) \\
+& \beta_2 \sim \mathcal{G}(0.001, 0.001) \\
+& \delta_t \sim Ber(p)  \\
+& p \sim Beta(1,1)  \\
+& \mu\sim \mathcal{N}(0,10)  \\
+\end{split}
+$$
+
+In particular we choose the priors for $\mu$, $\beta_1$, $\beta_2$ and $p$ to be weakly informative.
+
+```{r}
+# Filtering for data before 1949 and after 1978
+world_data_after1978 <- world_data[world_data$Year > 1978,]
+world_data_before1949 <- world_data[world_data$Year < 1949,]
+
+
+
+# After 1978
+CO2_log_78 = log(world_data_after1978$AnnualCO2, 10)
+n1 = length(CO2_log_78)
+
+delta_logdata_78 = CO2_log_78[2:n1] - CO2_log_78[1:n1-1]
+
+# Years 
+year_78 = world_data_after1978$Year
+
+
+
+# Before 1949
+CO2_log_49 = log(world_data_before1949$AnnualCO2, 10)
+n1 = length(CO2_log_49)
+
+delta_logdata_49 = CO2_log_49[2:n1]-CO2_log_49[1:n1-1]
+
+# Years 
+year_49 = world_data_before1949$Year
+```
+
+To make the variability of the data more enhanced we apply two transformations:
+
+-   Firstly we normalize the data
+
+-   Then we elevate to the power 3
+
+This makes outliers in the data easier to spot.
+
+```{r}
+# Enchancing the data
+# Normalization step
+mean_val <- mean(delta_logdata_78)
+sd_val <- sd(delta_logdata_78)
+
+delta_logdata_78_norm <- (delta_logdata_78 - mean_val) / sd_val
+
+# To enhance the varability in the data we evevate it power 3
+delta_logdata_78_p3 = delta_logdata_78_norm^3
+
+
+# Plots
+# Normal
+plot(year_78[1:length(delta_logdata_78)], delta_logdata_78, ylab="Delta log-co2", main="Delta log-co2 after 1978", xlab="Year")
+
+# Enhanced
+plot(year_78[1:length(delta_logdata_78_p3)], delta_logdata_78_p3, ylab="Delta log-co2", main="Enchanced Delta log-co2 after 1978", xlab="Year")
+```
+
+```{r}
+model4.string <-"model {
+  #likeliohood 
+  for(i in 1:N){
+    x[i] ~ dnorm(mu, inv.var[i])
+    inv.var[i] <- beta[1] + beta[2] * d[i]
+  }
+  
+  # Prior for d[i]
+  for(k in 1:N){
+    d[k] ~ dbern(p)             # probabilities
+  }
+  
+  # Prior for beta
+    # beta[1] ~ dexp(0.1)
+    # beta[2] ~ dexp(0.1)
+    beta[1] ~ dgamma(0.001, 0.001)    # Non informative
+    beta[2] ~ dgamma(0.001, 0.001)
+    
+  # Prior for beta
+   p ~ dbeta(1,1)                 
+   
+  # Prior for the mean
+  mu   ~ dnorm(0, 0.1)
+}"
+
+# After 1978
+data_78 <- list("x" = delta_logdata_78_p3, "N" = length(delta_logdata_78_p3))
+samp_78 <- jags(model.file = textConnection(model4.string),
+                     data=data_78,
+                     parameters.to.save= c("inv.var", "d", "mu"),
+                     n.adapt=1000, n.iter=20000, n.chains = 1, n.burnin = 2000)
+```
+
+We now plot the bayesian estimate of $\sigma^{-2}_t$. We can use these estimates to obtain a classification of the observations according to the value of the variance. Here we choose to divide the variances in two classes using the latent variables $\delta_t$.
+
+The first class corresponds to $E[\delta_t]<0.5$ and the second to $E[\delta_t]>0.5$.
+
+We may interpret the red line as periods of high volatility.
+
+```{r}
+# Getting inv.var and 'd[i]'
+inv.var = samp_78$mean$inv.var
+tauest = samp_78$mean$d        # tauest is the probability 'd[i]' 
+
+
+# Plotting the variance
+var = 1 / inv.var
+plot(year_78[1:length(delta_logdata_78_p3)], var, xlab="Year", ylab="posterior variance", main="posterior variance")
+
+
+# Plotting the probabilities
+plot(year_78[1:length(delta_logdata_78_p3)], tauest, xlab="Year", ylab="posterior probability", main="posterior probability")
+abline(h=0.2, col="red")
+# abline(h=0.25, col="orange")
+
+
+
+# Plots 3 & 4
+# Selecting the red points
+ii = seq(1:length(year_78))
+oo = ii[tauest < 0.2]      # Higher variance means a lower tau
+
+
+# Plot in the delta log domain
+plot(year_78[1:length(delta_logdata_78)], delta_logdata_78, main = "Delta log-co2 after 1978", ylab="Delta log-co2", xlab="Year")
+lines(year_78[oo], delta_logdata_78[oo], type="p", col="red")
+
+# The lines / red points indicate months with high variance
+for(k in oo){
+  abline(v = year_78[k], col="red", lty = 3)
+}
+
+
+
+# Plot in the AnnualCo2 domain
+plot(year_78, world_data_after1978$AnnualCO2, type='l', col='darkgreen', ylab="Annual CO2 (billion t)", main="CO2 Emissions for the World", xlab="Year")
+points(year_78, world_data_after1978$AnnualCO2, col='darkgreen', pch=16, cex=0.5)
+lines(year_78[oo], world_data_after1978$AnnualCO2[oo], type="p", col="red")
+
+# The lines / red points indicate years with high variance
+for(k in oo){
+  abline(v=year_78[k], col="red", lty = 3)
+}
+
+# Add a legend
+legend("topleft", legend="Significative change with consecutive year", pch=1, col="red", pt.cex=1, pt.lwd=2, cex=0.8)
+
+
+# We can suppose that years with high variace indicate crisis
+year_78[oo]
+```
+
+The years with the most significant variance in CO2 emission trends are: 1980, 1991, 2002, 2008, 2009, 2019, 2020.
+
+Those years indicate periods where the subsequent year experienced a noticeable change in CO2 emissions (we analysed the delta of the data) and can be directly linked with major global economic phenomena:
+
+-   1980: **Early 1980s Recession**, decrease in CO2 emissions.
+
+-   1991: **Dissolution of the Soviet Union** and **Early 1990s Recession**, decrease in CO2 emissions.
+
+-   2002: **Introduction of the Euro**, **11/09/2021 attacks**, increase in CO2 emissions.
+
+-   2008/2009: **Global Financial Crisis**, decrease in CO2 emissions.
+
+-   2019/2020: **Covid-19 Pandemic**, decrease in CO2 emissions.
+
+We will now repeat the same analysis for the years before 1949.
+
+```{r}
+# Enchancing the data
+# Normalization step
+mean_val <- mean(delta_logdata_49)
+sd_val <- sd(delta_logdata_49)
+
+delta_logdata_49_norm <- (delta_logdata_49 - mean_val) / sd_val
+
+
+# To enhance the varability in the data we evevate it power 3
+delta_logdata_49_p3 = delta_logdata_49_norm^3
+
+
+# Plots
+# Normal
+plot(year_49[1:length(delta_logdata_49)], delta_logdata_49, ylab="Delta log-co2", main="Delta log-co2 before 1949", xlab="Year")
+
+# Enhanced
+plot(year_49[1:length(delta_logdata_49_p3)], delta_logdata_49_p3, ylab="Delta log-co2", main="Enchanced Delta log-co2 before 1949", xlab="Year")
+```
+
+The general variance between datapoints is higher in this period. To obtain more extreme results we introduce a strong bias with respect to lower variance in the model and we change the priors to:
+
+$$ 
+\begin{split} 
+& \beta_1 \sim \mathcal{E}(10) \\
+& \beta_2 \sim \mathcal{E}(10) \\
+& \delta_t \sim Ber(p)  \\
+& p \sim Beta(1,1)  \\
+& \mu\sim \mathcal{N}(0,10)  \\
+\end{split}
+$$
+
+In particular we choose the priors for $\mu$, and $p$ to be weakly informative, while for $\beta_1$ and $\beta_2$ we injected a strong bias toward values near zero (higher parameter of the exponential distribution)
+
+```{r}
+model4.string <-"model {
+  #likeliohood
+  for(i in 1:N){
+    x[i] ~ dnorm(mu, inv.var[i])
+    inv.var[i] <- beta[1] + beta[2] * d[i]
+  }
+
+  # Prior for d[i]
+  for(k in 1:N){
+    d[k] ~ dbern(p)             # probabilities
+  }
+
+  # Prior for beta
+    beta[1] ~ dexp(10)       # Strong prior to generate more extreme results
+    beta[2] ~ dexp(10)
+    # beta[1] ~ dgamma(0.001, 0.001)    # Non informative
+    # beta[2] ~ dgamma(0.001, 0.001)
+
+  # Prior for beta
+   p ~ dbeta(1,1)
+
+  # Prior for the mean
+  mu   ~ dnorm(0, 0.1)
+}"
+
+
+# After 1978
+data_49 <- list("x" = delta_logdata_49_p3, "N" = length(delta_logdata_49_p3))
+samp_49 <- jags(model.file = textConnection(model4.string),
+                     data=data_49,
+                     parameters.to.save= c("inv.var", "d", "mu"),
+                     n.adapt=1000, n.iter=20000, n.chains = 1, n.burnin = 2000)
+```
+
+```{r}
+# Getting inv.var and 'd[i]'
+inv.var = samp_49$mean$inv.var
+tauest = samp_49$mean$d        # tauest is the probability 'd[i]' 
+
+
+# Plotting the variance
+var = 1 / inv.var
+plot(year_49[1:length(delta_logdata_49_p3)], var, xlab="Year", ylab="posterior variance", main="posterior variance")
+
+
+# Plotting the probabilities
+plot(year_49[1:length(delta_logdata_49_p3)], tauest, xlab="Year", ylab="posterior probability", main="posterior probability")
+abline(h=0.2, col="red")
+# abline(h=0.25, col="orange")
+
+
+
+# Plots 3 & 4
+# Selecting the red points
+ii = seq(1:length(year_49))
+oo = ii[tauest < 0.2]      # Higher variance means a lower tau
+
+
+# Plot in the delta log domain
+plot(year_49[1:length(delta_logdata_49)], delta_logdata_49, main = "Delta log-co2 after 1978", ylab="Delta log-co2", xlab="Year")
+lines(year_49[oo], delta_logdata_49[oo], type="p", col="red")
+
+# The lines / red points indicate months with high variance
+for(k in oo){
+  abline(v = year_49[k], col="red", lty = 3)
+}
+
+
+
+# Plot in the AnnualCo2 domain
+plot(year_49, world_data_before1949$AnnualCO2, type='l', col='darkgreen', ylab="Annual CO2 (billion t)", main="CO2 Emissions for the World", xlab="Year")
+points(year_49, world_data_before1949$AnnualCO2, col='darkgreen', pch=16, cex=0.5)
+lines(year_49[oo], world_data_before1949$AnnualCO2[oo], type="p", col="red")
+
+# The lines / red points indicate years with high variance
+for(k in oo){
+  abline(v=year_78[k], col="red", lty = 3)
+}
+
+# Add a legend
+legend("topleft", legend="Significative change with consecutive year", pch=1, col="red", pt.cex=1, pt.lwd=2, cex=0.8)
+
+
+# We can suppose that years with high variace indicate crisis
+year_49[oo]
+```
+
+The years with the most significant variance in CO2 emission trends are: 1913, 1918 ,1919, 1920, 1930, 1931, 1944.
+
+Those years indicate periods where the subsequent year experienced a noticeable change in CO2 emissions (we analysed the delta of the data) and can be directly linked with major global economic phenomena:
+
+-   1913: beginning of World War I (1914)
+
+-   1918/1919/1920: End of World War I (1918) and aftermath
+
+-   1930/1931: The Great Depression (1929–1939)
+
+-   1944: End of World War II (1945)
+
+**Disclaimer:** The years between 1900 and 1945 were troubled and had a lot of significant events happened in that period. This makes the general variability between each year more accentuated and as such significant events are harder to spot.
+
+```{r}
+
+```
+
+# Dataset 2
+
+**Sources:**
+
+<https://ourworldindata.org/grapher/energy-use-per-capita-vs-gdp-per-capita>
+
+<https://ourworldindata.org/grapher/co2-emissions-vs-gdp>
+
+<https://ourworldindata.org/grapher/low-carbon-energy-consumption?country=OMN>
+
+<https://ourworldindata.org/grapher/urbanization-vs-gdp>
+
+<https://ourworldindata.org/grapher/number-of-internet-users-by-country>
+
+**Short description:**
+
+This dataset focuses on human emissions of CO2 and other greenhouse gases, which are primary drivers of climate change and one of the world's most pressing challenges. It includes data for various nations and years (2006 to 2009), encompassing the following variables:
+
+-   **country**: name of the country.
+
+-   **y**: year.
+
+-   **EnergyUse**: Energy use [kg of oil equivalent per capita].
+
+-   **GDP**: Gross Domestic Product per capita. [1\$ per capita]
+
+-   **pop**: Population (historical estimates).
+
+-   **co2percap**: Annual CO2 emissions per capita. [tons per capita]
+
+-   **Lowcarbon_energy**: Low-carbon energy (% sub energy). Low-carbon energy is dened as the sum of nuclear and renewable sources. Renewable sources include hydropower, solar, wind, geothermal, wave and tidal and bioenergy. Traditional biofuels are not included.
+
+-   **urb**: urban population (%) .
+
+-   **internet**: number of internet users (OWID based on WB & UN).
+
+## Transformations to the original dataset
+
+To facilitate our analysis we will apply some trasformations to the data.
+
+The final structure will be the following: - **country**: name of the country.
+
+-   **y**: year.
+
+-   **EnergyUse**: Energy use [tons of oil equivalent per capita].
+
+-   **GDP**: Gross Domestic Product per capita. [1000\$ per capita]
+
+-   **pop**: Population (historical estimates). [milions people]
+
+-   **co2percap**: Annual CO2 emissions per capita. [tons per capita]
+
+-   **Lowcarbon_energy**: Low-carbon energy (% sub energy). Low-carbon energy is dened as the sum of nuclear and renewable sources. Renewable sources include hydropower, solar, wind, geothermal, wave and tidal and bioenergy. Traditional biofuels are not included.
+
+-   **urb**: urban population. [%]
+
+-   **internet**: number of internet users (OWID based on WB & UN).
+
+-   **internet_users_ratio**: ratio of internet users over the total population.
+
+```{r}
+rm(list=ls())
+
+# Loading the data
+CO2 <- read.csv("Data/CO2.csv")
+# Removing the 'World' datapoints
+CO2 <- CO2[CO2$country != 'World',]
+head(CO2)
+summary(CO2)
+
+# Calculate the ratio of internet users to population
+CO2$internet_users_ratio = CO2$internet / CO2$pop * 100
+# Rescaling some data
+CO2$GDP = CO2$GDP / 1000
+CO2$EnergyUse = CO2$EnergyUse / 1000
+CO2$pop = CO2$pop / 1000000
+
+
+
+# Colour palette
+library(RColorBrewer)
+num_countries <- length(unique(CO2$country))
+palette_colors <- colorRampPalette(brewer.pal(12, "Set1"))(num_countries)
+
+
+
+# Plotting the data by country
+plot(CO2$GDP, CO2$co2percap, 
+     xlab = "GDP [1K$]", ylab = "CO2 per capita [tons]", 
+     log = "xy", 
+     col = palette_colors[as.numeric(factor(CO2$country))]
+     )
+
+
+
+
+# Normlizzare le scale dei dati!!!!!!  (questo per avere risultati più significativi dalla feature selection) (forse non serve)
+```
+
+## Density & exploratory data analysis
+
+```{r}
+library(ggplot2)
+library(gridExtra)
+
+plot_hist_scatter <- function(data, hist_var, scatter_var_x, scatter_var_y,
+                              name_hist_var, name_x, name_y, unit_x, unit_y,
+                              log_scale = FALSE, bins = 20) 
+{
+  # Plot histogram
+  hist =
+    ggplot(data=data, aes_string(x=hist_var)) +
+    geom_histogram(aes(y=after_stat(density)), color='steelblue',
+                   fill='lightblue', bins = bins) +
+    ggtitle(paste("Histogram of", name_hist_var)) + 
+    xlab(name_hist_var)
+    ylab("Density")
+
+  # Plot scatter plot
+  scatter =
+    ggplot(data=data, aes_string(x=scatter_var_x, y=scatter_var_y)) +
+    geom_point(color='steelblue') +
+    ggtitle(paste(name_y, "vs.", name_x)) +
+    xlab(paste(name_x, unit_x)) +
+    ylab(paste(name_y, unit_y))
+
+
+  # Apply logarithmic scale if log_scale is TRUE
+  if (log_scale) {
+    scatter = scatter + scale_x_log10() + scale_y_log10() + ggtitle(paste(name_y,
+                "vs.",name_x, "(log scale)"))
+  }
+
+  # Arrange plots
+  gridExtra::grid.arrange(hist, scatter, ncol=2)
+}
+
+
+# Plots
+# MODIFICARE I NOMI!!!! (nomi migliori e unità di misura)
+plot_hist_scatter(CO2, hist_var="co2percap", "GDP", "co2percap", name_hist_var= "CO2 per cap", name_x="GDP", name_y="CO2 per cap", unit_x="[1k$]", unit_y="[tons]", bins = 10, log_scale = TRUE)
+
+plot_hist_scatter(CO2, hist_var="GDP", "GDP", "co2percap", name_hist_var="GDP", name_x="GDP", name_y="CO2 per cap", unit_x="[1k$]", unit_y="[tons]", bins = 10)
+
+plot_hist_scatter(CO2, hist_var="EnergyUse", "EnergyUse", "co2percap", name_hist_var="Energy Use", name_x="Energy Use", name_y="CO2 per cap", unit_x="[tons oil eq. per cap]", unit_y="[tons]", bins = 10)
+
+plot_hist_scatter(CO2, hist_var="pop", "pop", "co2percap", name_hist_var="Population", name_x="Population", name_y="CO2 per cap", unit_x="[Millions]", unit_y="[tons]", bins = 10)
+
+plot_hist_scatter(CO2, hist_var="Lowcarbon_energy", "Lowcarbon_energy", "co2percap", name_hist_var="Lowcarbon energy", name_x="Lowcarbon energy", name_y="CO2 per cap", unit_x="[% sub energy]", unit_y="[tons]", bins = 10)
+
+plot_hist_scatter(CO2, hist_var="urb", "urb", "co2percap", name_hist_var="Urbanization", name_x="Urbanization", name_y="CO2 per cap", unit_x="[%]", unit_y="[tons]", bins = 10)
+
+plot_hist_scatter(CO2, hist_var="internet_users_ratio", "internet_users_ratio", "co2percap", name_hist_var="Internet users ratio", name_x="Internet users ratio", name_y="CO2 per cap", unit_x="[%]", unit_y="[tons]", bins = 10)
+```
+
+## Correlation
+
+```{r}
+# Create a subset of the data
+CO2_subset <- CO2[, c("EnergyUse", "GDP", "pop", "co2percap", "Lowcarbon_energy", "urb", "internet_users_ratio")]
+
+head(CO2)
+
+# Boxplots:
+par(mfrow=c(1, 1), pty="m")
+boxplot(scale(CO2_subset), las=3, main="Standardized covariates", cex.axis=0.75)
+
+# Correlation matrix:
+par(mfrow=c(1, 1), pty="s")
+image(1:ncol(CO2_subset), 1:ncol(CO2_subset), cor(CO2_subset),
+      xlab="", ylab="", main="Correlation between predictors",
+      axes=FALSE)
+axis(1,1:ncol(CO2_subset), colnames(CO2_subset), las=2,cex.axis=0.9)
+axis(2,1:ncol(CO2_subset), colnames(CO2_subset), las=2,cex.axis=0.9)
+```
+
+The features with the higher correlation for the co2 per capita are EnergyUse, GDP and internet_user_ratio.
+
+I pallini rappresentano degli outliers, bisogna analizzarli. (ma anche no)
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+**Prossimi step:**
+
+-   fare uns spike and slab sul dataset (e giustificare l'usare solo il GDP con al posterior inclusion probability)
+
+-   fare una linear regression sul GDP e disegnare i cofidence intervals sulla linea di regression
+
+-   analizzare il gdp e la 'Energy Use' (capire perchè alcuni paesi hanno un alta EnergyUse e un basso inquinamento. Spoiler: risorse rinnovabili)
+
+Oss: alla presentazione finale, dopo aver presentato la task 3, dire che la prossima cosa che analizzeremo è quali sono i fattori che hanno una correlazione più alta con le emissioni di co2 e poi parlare delle regressioni sul dataset originale (task 1 e 2)
+
+Oss: from our long term analysis we have noticed that big swings of CO2 emissions are related to Recessions (decrease in emissions) and wars and improved economic conditions (Euro and 9/11).
+
+This directly relates to the GDP of the countries. (indagare/parlare di questa relazione)
