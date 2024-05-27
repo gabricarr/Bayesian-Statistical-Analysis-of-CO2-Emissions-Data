@@ -3,7 +3,7 @@ title: "Project CO2 - Bayesian Statistics"
 output: html_notebook
 ---
 
-# Project tasks
+# Project tasks (to delete)
 
 1.  Consider a regression model to explain C02 emission with the other variables. You can transform some of the variables.
 
@@ -39,7 +39,7 @@ By integrating these two datasets, our analysis aims to provide a comprehensive 
 
 Human emissions of carbon dioxide and other greenhouse gases between 1900 and 2022.
 
-Data have been selected for various nations and various years.
+It includes data for various nations, encompassing the following variables:
 
 -   **country**: name of the country.
 -   **Code**: the code of each country
@@ -558,6 +558,8 @@ legend("bottomleft", legend=c("Prediction"), col=c("darkorange"), lty=1)
 
 ```
 
+We need now to convert the prediction from the Delta log CO2 to total Annual CO2.
+
 ```{r}
 # Reversing the delta-log relation
 delta_log_predicted = yp_pred[2:(Npred)]    # discard the first one (last data point)
@@ -730,12 +732,28 @@ data_78 <- list("x" = delta_logdata_78_p3, "N" = length(delta_logdata_78_p3))
 samp_78 <- jags(model.file = textConnection(model4.string),
                      data=data_78,
                      parameters.to.save= c("inv.var", "d", "mu"),
-                     n.adapt=1000, n.iter=20000, n.chains = 1, n.burnin = 2000)
+                     n.adapt=1000, n.iter=50000, n.chains = 1, n.burnin = 2000,
+                     n.thin = 5)
+
+
+# Output
+samp_78
+
+
+# Trace and density
+plot(samp_78$samples[,c('mu')], main="posterior mu")
+plot(samp_78$samples[,c('inv.var[42]')], main="posterior inv.var[42]")
+
+
+
+# Autocorrelation
+autocorr.plot(samp_78$samples[,c('mu')], main="posterior mu")
+autocorr.plot(samp_78$samples[,c('inv.var[42]')], main="posterior inv.var[42]")
 ```
 
-We now plot the bayesian estimate of $\sigma^{-2}_t$. We can use these estimates to obtain a classification of the observations according to the value of the variance. Here we choose to divide the variances in two classes using the latent variables $\delta_t$.
+We now plot the bayesian estimate of $\sigma^{-2}_t$. We can use these estimates to obtain a classification of the observations according to the value of the variance.
 
-The first class corresponds to $E[\delta_t]<0.5$ and the second to $E[\delta_t]>0.5$.
+Here we choose to divide the variances in two classes using the latent variables $\delta_t$ (the probability of belonging to the **lower variance** group).
 
 We may interpret the red line as periods of high volatility.
 
@@ -875,7 +893,23 @@ data_49 <- list("x" = delta_logdata_49_p3, "N" = length(delta_logdata_49_p3))
 samp_49 <- jags(model.file = textConnection(model4.string),
                      data=data_49,
                      parameters.to.save= c("inv.var", "d", "mu"),
-                     n.adapt=1000, n.iter=20000, n.chains = 1, n.burnin = 2000)
+                     n.adapt=1000, n.iter=50000, n.chains = 1, n.burnin = 2000,
+                     n.thin = 5)
+
+
+# Output
+samp_49
+
+
+# Trace and density
+plot(samp_49$samples[,c('mu')], main="posterior mu")
+plot(samp_49$samples[,c('inv.var[12]')], main="posterior inv.var[12]")
+
+
+
+# Autocorrelation
+autocorr.plot(samp_49$samples[,c('mu')], main="posterior mu")
+autocorr.plot(samp_49$samples[,c('inv.var[12]')], main="posterior inv.var[12]")
 ```
 
 ```{r}
@@ -943,10 +977,10 @@ Those years indicate periods where the subsequent year experienced a noticeable 
 
 -   1944: End of World War II (1945)
 
-**Disclaimer:** The years between 1900 and 1945 were troubled and had a lot of significant events happened in that period. This makes the general variability between each year more accentuated and as such significant events are harder to spot.
+**Disclaimer:** The years between 1900 and 1945 were troubled and a lot of significant events happened in that period. This makes the general variability between each year more accentuated and as such significant events are harder to spot.
 
 ```{r}
-
+#
 ```
 
 # Dataset 2
@@ -987,9 +1021,11 @@ This dataset focuses on human emissions of CO2 and other greenhouse gases, which
 
 ## Transformations to the original dataset
 
-To facilitate our analysis we will apply some trasformations to the data.
+To facilitate our analysis we will apply some transformations to the data.
 
-The final structure will be the following: - **country**: name of the country.
+The final structure will be the following:
+
+-   **country**: name of the country.
 
 -   **y**: year.
 
@@ -1011,6 +1047,12 @@ The final structure will be the following: - **country**: name of the country.
 
 ```{r}
 rm(list=ls())
+
+library(rjags)
+library(bayesplot)
+library(jagsUI)
+library(loo)
+
 
 # Loading the data
 CO2 <- read.csv("Data/CO2.csv")
@@ -1043,12 +1085,12 @@ plot(CO2$GDP, CO2$co2percap,
      )
 
 
-
-
-# Normlizzare le scale dei dati!!!!!!  (questo per avere risultati più significativi dalla feature selection) (forse non serve)
+legend("topleft", legend="Each colour represents a country", cex=0.7)
 ```
 
-## Density & exploratory data analysis
+## Density & Exploratory data analysis
+
+We start our analysis by exploring the density of our dataset and visually representing the data in relation to CO2 emissions. This preliminary examination helps us understand the distribution and relationships within the data.
 
 ```{r}
 library(ggplot2)
@@ -1088,7 +1130,6 @@ plot_hist_scatter <- function(data, hist_var, scatter_var_x, scatter_var_y,
 
 
 # Plots
-# MODIFICARE I NOMI!!!! (nomi migliori e unità di misura)
 plot_hist_scatter(CO2, hist_var="co2percap", "GDP", "co2percap", name_hist_var= "CO2 per cap", name_x="GDP", name_y="CO2 per cap", unit_x="[1k$]", unit_y="[tons]", bins = 10, log_scale = TRUE)
 
 plot_hist_scatter(CO2, hist_var="GDP", "GDP", "co2percap", name_hist_var="GDP", name_x="GDP", name_y="CO2 per cap", unit_x="[1k$]", unit_y="[tons]", bins = 10)
@@ -1104,10 +1145,12 @@ plot_hist_scatter(CO2, hist_var="urb", "urb", "co2percap", name_hist_var="Urbani
 plot_hist_scatter(CO2, hist_var="internet_users_ratio", "internet_users_ratio", "co2percap", name_hist_var="Internet users ratio", name_x="Internet users ratio", name_y="CO2 per cap", unit_x="[%]", unit_y="[tons]", bins = 10)
 ```
 
-## Correlation
+## Correlation Analysis
+
+In this section, we examine the correlations between various covariates.
 
 ```{r}
-# Create a subset of the data
+# Create a subset of the data removing the unused covariates
 CO2_subset <- CO2[, c("EnergyUse", "GDP", "pop", "co2percap", "Lowcarbon_energy", "urb", "internet_users_ratio")]
 
 head(CO2)
@@ -1125,29 +1168,581 @@ axis(1,1:ncol(CO2_subset), colnames(CO2_subset), las=2,cex.axis=0.9)
 axis(2,1:ncol(CO2_subset), colnames(CO2_subset), las=2,cex.axis=0.9)
 ```
 
-The features with the higher correlation for the co2 per capita are EnergyUse, GDP and internet_user_ratio.
+The features with the highest correlation with CO2 emissions per capita (co2percap) are EnergyUse, GDP, and internet_user_ratio.
 
-I pallini rappresentano degli outliers, bisogna analizzarli. (ma anche no)
+## *Spike and slab prior*
+
+To perform variable selection we will use the Spike and Slab model.
+
+The spike & slab prior for a linear regression model is
+
+$$ \begin{align*}   
+& \beta_j \mid \gamma_j \overset{ind}\sim (1-\gamma_j)\,\delta_{(0)} + \gamma_j\,\mathcal{N}\left(0,     \sigma^2_{\beta_j}\right), \\   
+& \gamma_j \mid \theta_j \overset{ind}\sim \mathcal{B}e\left(\theta_j\right), \\[5pt]   
+& \theta_{j} \overset{iid}\sim p\left(\theta_j\right), \end{align*} 
+$$
+
+where $\theta_j$ is a probability which determines whether $\beta_j$ is nonzero and hence whether the corresponding covariate will be included in the model.
 
 ```{r}
+library(rjags)
 
-# first commit with Rstudio
+head(CO2_subset)
+# Spike and slab model
 ```
 
 ```{r}
+model_string = textConnection(
+"model {
+  # Likelihood 
+  for (i in 1:N) {
+  	Y[i] ~ dnorm(beta0 + inprod(X[i,], beta[]), inv.var.y)
+  }
+  
+  # Priors
+  inv.var.y ~ dgamma(0.01, 0.01)
+  beta0 ~ dnorm(0, 0.001)
+  
+  for(j in 1:P) {
+  	inv_var_beta[j] = 1 / var_beta[j]
+  }
+
+  for(j in 1:P) {
+    beta[j] = g[j] * betaTemp[j]
+    betaTemp[j] ~ dnorm(0, inv_var_beta[j])
+  
+  	g[j] ~ dbern(theta[j])                     
+  	theta[j] ~ dunif(0, 1)
+  }
+  
+}")
+
+
+# Model settings:
+Y = CO2_subset$co2percap
+
+# We standardise the data to help the algorithm
+X = within(CO2_subset, rm("co2percap"))
+X_norm = scale(X)                         # Standardization step
+P = ncol(X)
+N = nrow(X)
+
+# Data:
+var_beta=rep(1, P)
+dataList = list(Y=Y, X=X_norm, var_beta=var_beta, N=N, P=P)
+
+
+# Specify the initial values:
+inits = list(beta0=0, betaTemp=rep(0,P), g=rep(0,P), theta=rep(0.5,P))
+
+
+# Jags 2
+samples <- jags(model.file = model_string,
+                     data=dataList,
+                     # inits=inits,
+                     parameters.to.save= c("beta0", "beta", "g"),
+                     n.adapt=1000, n.iter=20000, n.chains = 3, n.burnin = 5000,
+                     n.thin = 2)
+
 
 ```
 
 ```{r}
+# Output
+samples
+
+
+# Trace and density
+# beta0
+plot(samples$samples[,c('beta0')], main="posterior beta0")
+
+# beta[i]
+for(k in 1:P){
+  param_name <- paste0("beta[", k, "]")  # Construct the parameter name dynamically
+  plot(samples$samples[, param_name], main = paste("Posterior of", param_name))
+}
+
+# g[i]
+for(k in 1:P){
+  param_name <- paste0("g[", k, "]")  # Construct the parameter name dynamically
+  plot(samples$samples[, param_name], main = paste("Posterior of", param_name))
+}
+```
+
+Here we can visualize the **posterior probability of inclusion** that corresponds to the posterior mean of the $\gamma_j$, which are called **`g`** in the code.
+
+```{r}
+ss = summary(samples)
+post_mean_g = ss[8:13, "mean"]
+post_mean_g 
 
 ```
 
-```{r}
+We can visualize them with a nice chart.
 
+```{r}
+# Load the library:
+library(ggplot2)
+
+postmeang_df = data.frame(value=post_mean_g, var=colnames(X))
+p1 = ggplot(data=postmeang_df, aes(y=value,x=var,fill=var)) + 
+  geom_bar(stat="identity") + 
+  geom_hline(mapping=aes(yintercept=0.5), col=2, lwd=1.1) +
+  coord_flip() + theme_minimal() + theme(legend.position="none") + 
+  ylab("Posterior inclusion probabilities") + xlab("")
+p1
+```
+
+The posterior probability of inclusion plot reveals some interesting results. The model shows a strong preference, assigning a probability of 1 to Lowcarbon_energy, GDP, and EnergyUse, while assigning near-zero probabilities to urbanization, population, and internet_user_ratio.
+
+These results are somewhat unexpected. While the high inclusion probabilities for GDP and EnergyUse are consistent with their strong correlation with co2percap, the high probability for **Lowcarbon_energy** is surprising given its **low correlation** with co2percap.
+
+```{r}
+plot_hist_scatter(CO2, hist_var="co2percap", "GDP", "co2percap", name_hist_var= "CO2 per cap", name_x="GDP", name_y="CO2 per cap", unit_x="[1k$]", unit_y="[tons]", bins = 10, log_scale = TRUE)
+
+plot_hist_scatter(CO2, hist_var="GDP", "GDP", "co2percap", name_hist_var="GDP", name_x="GDP", name_y="CO2 per cap", unit_x="[1k$]", unit_y="[tons]", bins = 10)
+
+plot_hist_scatter(CO2, hist_var="EnergyUse", "EnergyUse", "co2percap", name_hist_var="Energy Use", name_x="Energy Use", name_y="CO2 per cap", unit_x="[tons oil eq. per cap]", unit_y="[tons]", bins = 10, log_scale = TRUE)
+
+plot_hist_scatter(CO2, hist_var="EnergyUse", "EnergyUse", "co2percap", name_hist_var="Energy Use", name_x="Energy Use", name_y="CO2 per cap", unit_x="[tons oil eq. per cap]", unit_y="[tons]", bins = 10)
+
+plot_hist_scatter(CO2, hist_var="Lowcarbon_energy", "Lowcarbon_energy", "co2percap", name_hist_var="Lowcarbon energy", name_x="Lowcarbon energy", name_y="CO2 per cap", unit_x="[% sub energy]", unit_y="[tons]", bins = 10)
+
+
+# Posterior means of the betas
+post_mean_b = ss[c(2, 3, 5), "mean"]
+post_mean_b 
+```
+
+The beta parameters for both GDP and EnergyUse per capita are positive, indicating a positive linear relationship with co2percap, which is confirmed by the plots.
+
+For Lowcarbon_energy, the posterior mean of the beta parameter is negative, suggesting a negative linear relationship. This result is not immediately evident from the plot, as the data does not appear to follow a clear negative linear trend. However, the result is intuitively plausible: countries with a higher proportion of Lowcarbon_energy tend to produce less CO2.
+
+## Bayesian regressions
+
+From now on we will continue our analysis by focusing on the features GDP and EnergyUse. (dovremmo considerare anche la lowcarbon energy) **(Gabri inventati qualcosa tu)**
+
+### GDP and CO2 Emissions
+
+Next, we analyze the direct relationship between CO2 emissions and GDP.
+
+We perform the regression on the log scale for better interpretability of the data.
+
+The model is as follow:$$
+\begin{split}
+&  Y_i \sim \mathcal{N}(\alpha+ X_i \beta,\sigma^2) \\
+& \alpha \sim \mathcal{N}(0,100) \\
+& \beta \sim \mathcal{N}(0, 100)\\
+& \frac{1}{\sigma^{2}} \sim \mathcal{G}(0.001,0.001)  \\
+\end{split}
+$$
+
+```{r}
+# model
+model1 <- textConnection("model{
+  # likelihood
+	for (i in 1:N) {
+		Y[i] ~ dnorm(mu[i], inv.var)
+		mu[i] = alpha + X[i] * beta
+	}
+	
+	# prior 
+	alpha ~ dnorm(0, .01)
+	beta ~ dnorm(0, .01)
+	inv.var ~ dgamma(0.001, 0.001)
+	sigma2 <- 1/inv.var
+}")
+
+
+# Data
+# Y = CO2_subset$co2percap
+# X = CO2_subset$GDP
+Y = log(CO2_subset$co2percap)         # log
+X = log(CO2_subset$GDP)
+
+dataList = list(Y=Y, X=X, N=length(Y))
+
+
+# Jags 
+samples1 <- jags(model.file = model1,
+                     data=dataList,
+                     # inits=inits,
+                     parameters.to.save= c("alpha", "beta", "sigma2", "mu"),
+                     n.adapt=1000, n.iter=20000, n.chains = 2, n.burnin = 2000,
+                     n.thin = 2)
 ```
 
 ```{r}
+# Output
+samples1
 
+# Trace and density
+plot(samples1$samples[,c('alpha')], main="posterior alpha")
+plot(samples1$samples[,c('beta')], main="posterior beta")
+plot(samples1$samples[,c('sigma2')], main="posterior sigma2")
+
+
+
+# Autocorrelation
+# autocorr.plot(samples1$samples[,c('alpha')], main="ACF alpha")
+# autocorr.plot(samples$samples[,c('beta')], main="ACF beta")
+# autocorr.plot(samples$samples[,c('sigma2')], main="ACF sigma2")
+```
+
+```{r}
+# Plotting the data by country
+plot(X, Y,
+     xlab = "GDP [1k$]", ylab = "CO2 per capita [tons]", 
+     main = "CO2 per capita vs GDP (log scale)",
+     pch = 20,
+     cex = 1,
+     col = "black",
+     xaxt = 'n',  # suppress default x-axis
+     yaxt = 'n'  # suppress default x-axis
+     )
+
+# Adding custom x-axis labels
+new_labels_x <- c(10^1, 10^2, 10^3, 10^4)
+axis(1, at = seq_along(new_labels_x), labels = new_labels_x)
+
+# Adding custom y-axis labels
+new_labels_y <- c(10^-1, 10^0, 10^1, 10^2, 10^3)
+axis(2, at = seq_along(new_labels_y) - 2, labels = new_labels_y)
+
+
+
+# Recovering alpha and beta
+ss = summary(samples1)
+# Alpha
+alpha_mean = ss["alpha", "mean"]
+alpha_q1 = ss["alpha", "2.5%"]
+alpha_q2 = ss["alpha", "97.5%"]
+# Beta
+beta_mean = ss["beta", "mean"]
+beta_q1 = ss["beta", "2.5%"]
+beta_q2 = ss["beta", "97.5%"]
+
+# Add a gray background
+rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col = "gray90", border = NA)
+panel.first = grid(col = "white", lty = "dotted")
+points(X, Y, pch = 20, cex = 1, col = "black")
+
+# Lines
+abline(a = alpha_mean, b = beta_mean, col = "red", lwd = 3)
+abline(a = alpha_q1, b = beta_q1, col = "red", lty=2, lwd = 3)
+abline(a = alpha_q2, b = beta_q2, col = "red", lty=2, lwd = 3)
+
+# legend
+legend("topleft", legend=c("2.5%", "97.5%"), col=c("red", "red"), lty=3, lwd = 3,
+       cex=0.8)
+```
+
+```{r}
+# ggplot version (ignorare)
+
+# Load necessary library
+library(ggplot2)
+
+# Plot
+g_bayes = ggplot(data=CO2_subset, aes(x=log(GDP), y=log(co2percap))) + 
+  geom_point() +
+  geom_abline(intercept = alpha_mean, slope = beta_mean, color = "red", 
+              linewidth = 1) +
+  geom_abline(intercept = alpha_q1, slope = beta_q1, color = "red",
+              linetype = "dashed", linewidth = 1) +
+  geom_abline(intercept = alpha_q2, slope = beta_q2, color = "red",
+              linetype = "dashed", linewidth = 1) +
+  scale_color_manual(name="Curves", values=c('blue','red')) +
+  scale_fill_manual(name="Bands", values='blue')
+
+# g_bayes
+  
+```
+
+As we can see from the plot, there is a clear positive linear relationship between GDP and CO2 emissions per capita.
+
+This finding aligns with the analysis performed on **Dataset 1**, explaining why economic **recessions** tend to reduce CO2 emission intensity, whereas periods of **economic growth** correspond with a more rapid increase in emissions.
+
+### Energy Use and CO2 Emissions
+
+We also analyze the direct relationship between CO2 emissions and Energy Use.
+
+Again, we perform the regression on the log scale for better interpretability.
+
+The model is as follow:$$
+\begin{split}
+&  Y_i \sim \mathcal{N}(\alpha+ X_i \beta,\sigma^2) \\
+& \alpha \sim \mathcal{N}(0,100) \\
+& \beta \sim \mathcal{N}(0, 100)\\
+& \frac{1}{\sigma^{2}} \sim \mathcal{G}(0.001,0.001)  \\
+\end{split}
+$$
+
+```{r}
+# model
+model2 <- textConnection("model{
+  # likelihood
+	for (i in 1:N) {
+		Y[i] ~ dnorm(mu[i], inv.var)
+		mu[i] = alpha + X[i] * beta
+	}
+	
+	# prior 
+	alpha ~ dnorm(0, .01)
+	beta ~ dnorm(0, .01)
+	inv.var ~ dgamma(0.001, 0.001)
+	sigma2 <- 1/inv.var
+}")
+
+
+# Data
+# Y = CO2_subset$co2percap
+# X = CO2_subset$EnergyUse
+Y = log(CO2_subset$co2percap)         # log
+X = log(CO2_subset$EnergyUse)
+
+dataList = list(Y=Y, X=X, N=length(Y))
+
+
+# Jags 
+samples2 <- jags(model.file = model2,
+                     data=dataList,
+                     # inits=inits,
+                     parameters.to.save= c("alpha", "beta", "sigma2", "mu"),
+                     n.adapt=1000, n.iter=20000, n.chains = 2, n.burnin = 2000,
+                     n.thin = 2)
+```
+
+```{r}
+# Output
+samples2
+
+# Trace and density
+plot(samples2$samples[,c('alpha')], main="posterior alpha")
+plot(samples2$samples[,c('beta')], main="posterior beta")
+plot(samples2$samples[,c('sigma2')], main="posterior sigma2")
+```
+
+```{r}
+# Plotting the data by country
+plot(X, Y,
+     xlab = "Energy Use [tons oil eq. per cap]", ylab = "CO2 per capita [tons]", 
+     main = "CO2 per capita vs Energy Use (log scale)",
+     pch = 20,
+     cex = 1,
+     col = "black",
+     xaxt = 'n',  # suppress default x-axis
+     yaxt = 'n'  # suppress default x-axis
+     )
+
+# # Adding custom x-axis labels
+new_labels_x <- c(10^1, 10^2, 10^3, 10^4, 10^5)
+axis(1, at = seq_along(new_labels_x), labels = new_labels_x)
+# 
+# # Adding custom y-axis labels
+new_labels_y <- c(10^-1, 10^0, 10^1, 10^2, "1e3")
+axis(2, at = seq_along(new_labels_y) - 2, labels = new_labels_y)
+
+
+
+# Recovering alpha and beta
+ss = summary(samples2)
+# Alpha
+alpha_mean = ss["alpha", "mean"]
+alpha_q1 = ss["alpha", "2.5%"]
+alpha_q2 = ss["alpha", "97.5%"]
+# Beta
+beta_mean = ss["beta", "mean"]
+beta_q1 = ss["beta", "2.5%"]
+beta_q2 = ss["beta", "97.5%"]
+
+# Add a gray background
+rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col = "gray90", border = NA)
+panel.first = grid(col = "white", lty = "dotted")
+points(X, Y, pch = 20, cex = 1, col = "black")
+
+# Lines
+abline(a = alpha_mean, b = beta_mean, col = "red", lwd = 3)
+abline(a = alpha_q1, b = beta_q1, col = "red", lty=2, lwd = 3)
+abline(a = alpha_q2, b = beta_q2, col = "red", lty=2, lwd = 3)
+
+# legend
+legend("topleft", legend=c("2.5%", "97.5%"), col=c("red", "red"), lty=3, lwd = 3,
+       cex=0.8)
+```
+
+The analysis reveals a strong linear relationship between Energy Use and CO2 emissions per capita.
+
+However, there are some data points that appear to be outliers. While these outliers are less evident in the log plot, they become more noticeable when plotted on the real scale.
+
+```{r}
+# Plotting the data by country
+plot(CO2$EnergyUse, CO2$co2percap, 
+     xlab = "Energy Use [tons oil eq. per cap]", ylab = "CO2 per capita [tons]", 
+     # log = "xy", 
+     col = palette_colors[as.numeric(factor(CO2$country))]
+     )
+
+legend("topleft", legend="Each colour represents a country", cex=0.7)
+
+
+# Selecting the outlier country
+# Subset the data
+selected_countries <- subset(CO2, co2percap < 20 & EnergyUse > 100)
+
+# View the selected countries
+countries = unique(selected_countries$country)
+
+selected_countries
+countries
+```
+
+Upon closer inspection, the pnly outlier is Iceland.
+
+Iceland's relatively low CO2 emissions can be attributed to its substantial use of low-carbon energy sources, which accounted for up to 80% of its energy production in 2009.
+
+### Low carbon Energy
+
+(questo possiamo eliminarlo) o inventati qualcosa
+
+```{r}
+
+# Exponential response
+# model3 <- textConnection("model{
+#   # likelihood
+# 	for (i in 1:N) {
+# 		# Y[i] ~ dnorm(mu[i], inv.s)
+# 		Y[i] ~ dexp(mu[i])
+# 		log(mu[i]) = alpha + X[i] * beta
+# 	}
+# 
+# 	# prior
+# 	alpha ~ dnorm(0, .001)
+# 	beta ~ dnorm(0, .001)
+# 	inv.s ~ dgamma(0.001, 0.001)
+# }")
+
+# Normal model
+model3 <- textConnection("model{
+  # likelihood
+	for (i in 1:N) {
+		Y[i] ~ dnorm(mu[i], inv.s)
+		# Y[i] ~ dexp(mu[i])
+		mu[i] = alpha + X[i] * beta
+	}
+
+	# prior
+	alpha ~ dnorm(0, .001)
+	beta ~ dnorm(0, .001)
+	inv.s ~ dgamma(0.001, 0.001)
+}")
+
+
+# Data
+Y = CO2_subset$co2percap
+X = CO2_subset$Lowcarbon_energy
+# Y = log(CO2_subset$co2percap)         # log
+# X = log(CO2_subset$Lowcarbon_energy)
+
+dataList = list(Y=Y, X=X, N=length(Y))
+
+
+# Jags 
+samples3 <- jags(model.file = model3,
+                     data=dataList,
+                     # inits=inits,
+                     parameters.to.save= c("alpha", "beta", "mu"),
+                     n.adapt=1000, n.iter=20000, n.chains = 2, n.burnin = 2000,
+                     n.thin = 2)
+```
+
+```{r}
+# Output
+samples3
+
+# Trace and density
+plot(samples3$samples[,c('alpha')], main="posterior alpha")
+plot(samples3$samples[,c('beta')], main="posterior beta")
+# plot(samples3$samples[,c('sigma2')], main="posterior sigma2")
+```
+
+```{r}
+# Plotting the data by country
+plot(X, Y,
+     xlab = "Low Carbon Energy", ylab = "CO2 per capita [tons]", 
+     main = "CO2 per capita vs Low carbon energy",
+     pch = 20,
+     cex = 1,
+     col = "black",
+     # xaxt = 'n',  # suppress default x-axis
+     # yaxt = 'n'  # suppress default x-axis
+     )
+
+# # # Adding custom x-axis labels
+# new_labels_x <- c(10^1, 10^2, 10^3, 10^4, 10^5)
+# axis(1, at = seq_along(new_labels_x), labels = new_labels_x)
+# # 
+# # # Adding custom y-axis labels
+# new_labels_y <- c(10^-1, 10^0, 10^1, 10^2, "1e3")
+# axis(2, at = seq_along(new_labels_y) - 2, labels = new_labels_y)
+
+
+
+
+
+
+
+# Recovering alpha and beta
+ss = summary(samples3)
+# Alpha
+alpha_mean = ss["alpha", "mean"]
+alpha_q1 = ss["alpha", "2.5%"]
+alpha_q2 = ss["alpha", "97.5%"]
+# Beta
+beta_mean = ss["beta", "mean"]
+beta_q1 = ss["beta", "2.5%"]
+beta_q2 = ss["beta", "97.5%"]
+
+
+# # Exponential  (use those plot with the exponential model)
+# Y_pred = exp(alpha_mean + beta_mean*X)
+# Y_q1 = exp(alpha_q1 + beta_q1*X)
+# Y_q2 = exp(alpha_q2 + beta_q2*X)
+# 
+# 
+# points(X, 1/Y_pred, col='red')
+# points(X, 1/Y_q1, col='green')
+# points(X, 1/Y_q2, col='green')
+
+
+
+
+
+
+
+# Normal response
+
+# Add a gray background
+rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col = "gray90", border = NA)
+panel.first = grid(col = "white", lty = "dotted")
+points(X, Y, pch = 20, cex = 1, col = "black")
+
+# Lines
+abline(a = alpha_mean, b = beta_mean, col = "red", lwd = 3)
+abline(a = alpha_q1, b = beta_q1, col = "red", lty=2, lwd = 3)
+abline(a = alpha_q2, b = beta_q2, col = "red", lty=2, lwd = 3)
+
+# legend
+legend("topleft", legend=c("2.5%", "97.5%"), col=c("red", "red"), lty=3, lwd = 3,
+       cex=0.8)
+```
+
+```{r}
+#
+```
+
+```{r}
+#
 ```
 
 ```{r}
@@ -1155,15 +1750,3 @@ I pallini rappresentano degli outliers, bisogna analizzarli. (ma anche no)
 ```
 
 **Prossimi step:**
-
--   fare uns spike and slab sul dataset (e giustificare l'usare solo il GDP con al posterior inclusion probability)
-
--   fare una linear regression sul GDP e disegnare i cofidence intervals sulla linea di regression
-
--   analizzare il gdp e la 'Energy Use' (capire perchè alcuni paesi hanno un alta EnergyUse e un basso inquinamento. Spoiler: risorse rinnovabili)
-
-Oss: alla presentazione finale, dopo aver presentato la task 3, dire che la prossima cosa che analizzeremo è quali sono i fattori che hanno una correlazione più alta con le emissioni di co2 e poi parlare delle regressioni sul dataset originale (task 1 e 2)
-
-Oss: from our long term analysis we have noticed that big swings of CO2 emissions are related to Recessions (decrease in emissions) and wars and improved economic conditions (Euro and 9/11).
-
-This directly relates to the GDP of the countries. (indagare/parlare di questa relazione)
