@@ -3,6 +3,8 @@ title: "Project CO2 - Bayesian Statistics"
 output: html_notebook
 ---
 
+# Bayesian Statistical Analysis of CO2 Emissions Data
+
 # Project tasks (to delete)
 
 1.  Consider a regression model to explain C02 emission with the other variables. You can transform some of the variables.
@@ -11,23 +13,27 @@ output: html_notebook
 
 3.  In addition you can: consider and compare various years. Consider the time as a covariate. Add more covariates (taking them from the web). Consider time series models.
 
-# Datasets & Outline
+# Introduction
 
-We have included two main datasets in our analysis.
+Human emissions of carbon dioxide and other greenhouse gases are a primary driver of climate change and present one of the world's most pressing challenges.
+
+To understand this complex issue better our analysis will focus on:
+
+1.  **Long-Term Trends**: we will examine how CO2 emissions have evolved over the past century, identifying key periods of increase or decrease in the speed of emissions and correlating these with historical events.
+
+2.  **Recent Factors Influencing CO2 Emissions**: we will analyze the impact of various factors on CO2 emissions from 2006 to 2009. This includes investigating the relationship between CO2 emissions and variables such as energy consumption, GDP, urbanization, and the adoption of low-carbon energy sources.
+
+3.  **Comparative Analysis**: We will compare findings from both datasets to understand how historical trends relate to more recent developments.
+
+# Datasets
+
+Brief description of the datasets:
 
 -   **Dataset 1** encompasses annual CO2 emissions for each year from 1900 to 2022. This dataset provides a comprehensive perspective on CO2 emissions over more than a century, allowing us to identify long-term trends and patterns.
 
 -   **Dataset 2** is more granular and concentrates on the years 2006 to 2009. It includes various features such as energy use per capita, GDP, population, CO2 emissions per capita, the percentage of low-carbon energy in total energy production, urbanization levels, and internet usage. This dataset allows for a detailed analysis of specific factors that may influence CO2 emissions during a recent, focused timeframe.
 
-Our analysis will focus on:
-
-1.  **Long-Term Trends**: Using Dataset 1, we will examine how CO2 emissions have evolved over the past century, identifying key periods of increase or decrease and correlating these with historical events.
-
-2.  **Recent Factors Influencing CO2 Emissions**: With Dataset 2, we will analyze the impact of socio-economic and technological factors on CO2 emissions from 2006 to 2009. This includes investigating the relationship between CO2 emissions and variables such as energy consumption, economic activity, urbanization, and the adoption of low-carbon energy sources.
-
-3.  **Comparative Analysis**: We will compare findings from both datasets to understand how historical trends relate to more recent developments.
-
-By integrating these two datasets, our analysis aims to provide a comprehensive understanding of CO2 emissions over time and the key factors driving changes in recent years.
+By integrating these two datasets, we aim to analyse CO2 emissions over time and identify the factors driving changes in recent years.
 
 # Dataset 1
 
@@ -61,7 +67,7 @@ plot(world_data$Year, world_data$AnnualCO2, type='l', col='darkgreen', ylab="Ann
 points(world_data$Year, world_data$AnnualCO2, col='darkgreen', pch=16, cex=0.5)
 ```
 
-The data presents a clear exponential trend, for this reason we will try to analyse the **logarithm** of the data and see if we can find some interesting trends.
+The data presents a clear exponential trend, for this reason it could be interesting to analyse the **logarithm** of the data and see if we can find some interesting trends.
 
 We will transform the CO2 in log_CO2 and also compute the **increment in log_CO2** i.e $$
 x_t :=\log(y_{t+1})-\log(y_t)
@@ -103,7 +109,7 @@ $$ and $$
 \sigma_t^2 =\sigma_{2}^2 \quad t \geq \tau
 $$ where $\sigma_1^2, \sigma_2^2$ are unknown.
 
-We assume the following priors: $$
+The model is as follows: $$
 \begin{split}
 & y_t \sim \mathcal{N}(\mu_0,\sigma_t^2)\\
 & \sigma_t=\sigma_{1}^2 \{t < \tau \} + \sigma_2^2 \{ t \geq \tau\} \\
@@ -243,7 +249,7 @@ One possible interpretation of these findings is that improved economic conditio
 
 For the next analysis we will try to fit to our data after the first shift (1951) with a change point model on the mean of the delta log-co2. (i.e. we will analyse the speed of the increase of CO2).
 
-We assume the following priors:$$
+The model is as follows:$$
 \begin{split}
 & y_t  \stackrel{ind}{\sim} \mathcal{N}(\mu_t,\sigma_{0}^2)\\
 & \mu_t=m_{1} \{t < \tau \} + m_2 \{ t \geq \tau\} \\
