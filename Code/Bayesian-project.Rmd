@@ -1013,7 +1013,7 @@ This dataset focuses on human emissions of CO2 and other greenhouse gases, which
 
 -   **co2percap**: Annual CO2 emissions per capita. [tons per capita]
 
--   **Lowcarbon_energy**: Low-carbon energy (% sub energy). Low-carbon energy is dened as the sum of nuclear and renewable sources. Renewable sources include hydropower, solar, wind, geothermal, wave and tidal and bioenergy. Traditional biofuels are not included.
+-   **Lowcarbon_energy**: Low-carbon energy (% sub energy). Low-carbon energy is defined as the sum of nuclear and renewable sources. Renewable sources include hydropower, solar, wind, geothermal, wave and tidal and bioenergy. Traditional biofuels are not included.
 
 -   **urb**: urban population (%) .
 
@@ -1037,7 +1037,7 @@ The final structure will be the following:
 
 -   **co2percap**: Annual CO2 emissions per capita. [tons per capita]
 
--   **Lowcarbon_energy**: Low-carbon energy (% sub energy). Low-carbon energy is dened as the sum of nuclear and renewable sources. Renewable sources include hydropower, solar, wind, geothermal, wave and tidal and bioenergy. Traditional biofuels are not included.
+-   **Lowcarbon_energy**: Low-carbon energy (% sub energy). Low-carbon energy is defined as the sum of nuclear and renewable sources. Renewable sources include hydropower, solar, wind, geothermal, wave and tidal and bioenergy. Traditional biofuels are not included.
 
 -   **urb**: urban population. [%]
 
@@ -1295,7 +1295,7 @@ p1
 
 The posterior probability of inclusion plot reveals some interesting results. The model shows a strong preference, assigning a probability of 1 to Lowcarbon_energy, GDP, and EnergyUse, while assigning near-zero probabilities to urbanization, population, and internet_user_ratio.
 
-These results are somewhat unexpected. While the high inclusion probabilities for GDP and EnergyUse are consistent with their strong correlation with co2percap, the high probability for **Lowcarbon_energy** is surprising given its **low correlation** with co2percap.
+These results are interesting. While the high inclusion probabilities for GDP and EnergyUse are consistent with their strong correlation with co2percap, the high probability for **Lowcarbon_energy** is surprising given its **low correlation** with co2percap.
 
 ```{r}
 plot_hist_scatter(CO2, hist_var="co2percap", "GDP", "co2percap", name_hist_var= "CO2 per cap", name_x="GDP", name_y="CO2 per cap", unit_x="[1k$]", unit_y="[tons]", bins = 10, log_scale = TRUE)
@@ -1320,7 +1320,7 @@ For Lowcarbon_energy, the posterior mean of the beta parameter is negative, sugg
 
 ## Bayesian regressions
 
-From now on we will continue our analysis by focusing on the features GDP and EnergyUse. (dovremmo considerare anche la lowcarbon energy) **(Gabri inventati qualcosa tu)**
+From now on we will continue our analysis by focusing on the covariates GDP, EnergyUse and Lowcarbon Energy. (se vogliamo possiamo scartare lowcarbon energy) **(Gabri inventati qualcosa tu)**
 
 ### GDP and CO2 Emissions
 
@@ -1597,11 +1597,13 @@ selected_countries
 countries
 ```
 
-Upon closer inspection, the pnly outlier is Iceland.
+Upon closer inspection, the only outlier is Iceland.
 
 Iceland's relatively low CO2 emissions can be attributed to its substantial use of low-carbon energy sources, which accounted for up to 80% of its energy production in 2009.
 
 ### Low carbon Energy
+
+Low-carbon energy is defined as the sum of nuclear and renewable sources. Intuitively it is reasonable to expect to find a negative relation with the CO2 emissions.
 
 (questo possiamo eliminarlo) o inventati qualcosa
 
@@ -1669,7 +1671,7 @@ plot(samples3$samples[,c('beta')], main="posterior beta")
 ```{r}
 # Plotting the data by country
 plot(X, Y,
-     xlab = "Low Carbon Energy", ylab = "CO2 per capita [tons]", 
+     xlab = "Low Carbon Energy %", ylab = "CO2 per capita [tons]", 
      main = "CO2 per capita vs Low carbon energy",
      pch = 20,
      cex = 1,
@@ -1678,16 +1680,13 @@ plot(X, Y,
      # yaxt = 'n'  # suppress default x-axis
      )
 
-# # # Adding custom x-axis labels
+# Adding custom x-axis labels
 # new_labels_x <- c(10^1, 10^2, 10^3, 10^4, 10^5)
 # axis(1, at = seq_along(new_labels_x), labels = new_labels_x)
 # # 
 # # # Adding custom y-axis labels
 # new_labels_y <- c(10^-1, 10^0, 10^1, 10^2, "1e3")
 # axis(2, at = seq_along(new_labels_y) - 2, labels = new_labels_y)
-
-
-
 
 
 
@@ -1704,7 +1703,9 @@ beta_q1 = ss["beta", "2.5%"]
 beta_q2 = ss["beta", "97.5%"]
 
 
-# # Exponential  (use those plot with the exponential model)
+
+
+# Exponential  (use those plot with the exponential model)
 # Y_pred = exp(alpha_mean + beta_mean*X)
 # Y_q1 = exp(alpha_q1 + beta_q1*X)
 # Y_q2 = exp(alpha_q2 + beta_q2*X)
@@ -1713,9 +1714,6 @@ beta_q2 = ss["beta", "97.5%"]
 # points(X, 1/Y_pred, col='red')
 # points(X, 1/Y_q1, col='green')
 # points(X, 1/Y_q2, col='green')
-
-
-
 
 
 
@@ -1736,6 +1734,8 @@ abline(a = alpha_q2, b = beta_q2, col = "red", lty=2, lwd = 3)
 legend("topleft", legend=c("2.5%", "97.5%"), col=c("red", "red"), lty=3, lwd = 3,
        cex=0.8)
 ```
+
+The model we choose doesn't fit too well with the data, but a small negative trend is present and our hypothesis are verified.
 
 ```{r}
 #
