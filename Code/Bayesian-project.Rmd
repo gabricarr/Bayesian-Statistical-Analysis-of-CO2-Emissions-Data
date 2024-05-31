@@ -390,13 +390,13 @@ colnames(df) <- c("5%", "Mean", "95%")
 print(df)
 ```
 
-As we can see from our analysis we can indeed spot a change in the mean of our model around 1973, **with** **a 90% chance this change occurred between 1970 and 1978.**
+As we can see from the plots we can indeed spot a change in the mean of our model around 1973, **with** **a 90% chance this change occurred between 1970 and 1978.**
 
-An interpretation of this finding suggests that the worsened economic conditions caused by the economic recessions of that era may have contributed to a slowdown in CO2 emissions growth
+An interpretation of this finding could be that the worsened economic conditions caused by the economic recessions of that era may have contributed to a slowdown in CO2 emissions growth.
 
 ### Regressions over the change points
 
-**Our analysis identified two potential turning points in the CO2 emission trend: 1951 and 1973.** To gain a clearer visual understanding of these shifts, we'll segment the data into three periods: **before**, **between**, and **after** these critical years. **By fitting regression lines to the log of CO2 emissions for each period, we can directly visualize the changes** in the emission trajectory.
+**Our analysis identified two potential turning points in the CO2 emission trend: 1951 and 1973.** To gain a clearer visual understanding of these shifts, we'll segment the data into three periods: **before**, **between**, and **after** these critical years. **By fitting regression lines to the log of CO2 emissions for each period, we can directly visualize the changes** in the emissions trajectory.
 
 ```{r}
 # Adding a columns for the log data
