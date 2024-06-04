@@ -21,7 +21,7 @@ To understand this complex issue better our analysis will focus on:
 
 1.  **Long-Term Trends**: we will examine how CO2 emissions have evolved over the past century, identifying key periods of increase or decrease in the speed of emissions and correlating these with historical events.
 
-2.  **Recent Factors Influencing CO2 Emissions**: we will analyze the impact of various factors on CO2 emissions from 2006 to 2009. This includes investigating the relationship between CO2 emissions and variables such as energy consumption, GDP, urbanization, and the adoption of low-carbon energy sources.
+2.  **Recent Factors Influencing CO2 Emissions**: we will analyze the impact of various factors on CO2 emissions from 2006 to 2009. This includes investigating the relationship between CO2 emissions and variables such as energy consumption, GDP, and the adoption of low-carbon energy sources.
 
 3.  **Comparative Analysis**: We will compare findings from both datasets to understand how historical trends relate to more recent developments.
 
@@ -36,6 +36,8 @@ Brief description of the datasets:
 By integrating these two datasets, we aim to analyse CO2 emissions over time and identify the factors driving changes in recent years.
 
 # Dataset 1
+
+We begin our analysis by considering the long-term trends in annual CO2 emissions over the last century.
 
 **Sources:**
 
@@ -247,7 +249,7 @@ One possible interpretation of these findings is that improved economic conditio
 
 **Given the potential shift in CO2 emission patterns around 1951, a next step could be to investigate if there are further changes in trend following this period.** The Post-War Economic Boom ended with a recession (1973-1975), followed by an even deeper one in the early 1980s. This historical context prompts the question: **Can we detect another change point in the CO2 emissions data after 1951?**
 
-For the next analysis we will try to fit to our data after the first shift (1951) with a change point model on the mean of the delta log-co2. (i.e. we will analyse the speed of the increase of CO2).
+For the next analysis we will try to fit the data after the first shift (1951) with a change point model on the mean of the delta log-co2 in the years after 1956 (95% quantile of the change point on the variance). This means that we will analyse the change in speed of the increase of CO2 (mean of the logarithm) and not its variance anymore.
 
 The model is as follows:$$
 \begin{split}
@@ -264,7 +266,9 @@ We choose the priors for $\mu_0$ and $\frac{1}{\sigma^2}$ to be weakly informati
 
 ```{r}
 # Filtering for data after the change point
-world_data_after1951 <- world_data[world_data$Year > 1951,]
+# !!! The data is after 1956 (even if the variable has a 51 in the name)
+world_data_after1951 <- world_data[world_data$Year > 1956,]
+          
 
 # Creating the data
 CO2_log_51 = log(world_data_after1951$AnnualCO2, 10)
@@ -447,21 +451,23 @@ abline(v = 1973, col = "green", lwd = 1, lty = 3)
 legend("topleft", legend=c("1951", "1973"), col=c("red", "green"), lty=3)
 ```
 
+As we can see from the plots there is a clear shift in the speed of increase of emissions before and after the change points.
+
 ## AR(1) model - Time series prediction
 
 Building on the identified change points in CO2 emissions, a crucial next step is to explore what lies ahead.
 
-Can this knowledge be used to predict when we might reach a **critical level of CO2** emissions that would push global temperatures **1.5°C** above pre-industrial levels?
-
 The current estimate (2023) for the world's remaining carbon budget for a 50% chance to stay under 1.5 °C (2.7 °F) is **250 gigatonnes CO2**.
 
-We will carry on this analysis by fitting an **AR(1)** model with parameters $\mu,\alpha$ and $\sigma^2$ to the data after 1978 (95% that the change point has happened).
+**Can we predict when we might reach a critical level of CO2 emissions that would push global temperatures 1.5°C above pre-industrial levels?**
+
+We will carry on this analysis by fitting an **AR(1)** model with parameters $\mu,\alpha$ and $\sigma^2$ to the delta of the logarithm of CO2 emissions on data after 1978 (95% that the change point has happened).
 
 We assume the following priors: $$ 
 \begin{split} 
 & \alpha \sim \mathcal{U}(-1,1)  \\ 
 & \mu\sim \mathcal{N}(0,10)  \\ 
-&  \tau=\frac{1}{\sigma^2} \sim \mathcal{G}(0.001,0.001)   \\ 
+&  \tau=\frac{1}{\sigma^2} \sim \mathcal{G}(0.001,0.001)   
 \end{split}
 $$
 
@@ -611,7 +617,7 @@ points(new_years_p, yp, pch=16, cex=0.5, col="darkorange")
 points(critical_year, yp[i], pch=1, cex=1, lwd=2, col="red")
 
 # Critical year line
-# abline(v=critical_year, col="red", lty = 3)
+abline(v=critical_year, col="red", lty = 3)
 
 # Add a legend
 legend("topleft", legend=critical_year, pch=1, col="red", pt.cex=1, pt.lwd=2)
@@ -629,7 +635,11 @@ Now we want to ask a different question: **can we detect global crisis and major
 
 We will carry on this analysis by fitting a white noise model with switching variance on the increment of the log of CO2 emissions.
 
-We will split our data by leveraging the change points discovered in two sub-datasets: years before **1949** (5% quantile of the change point on the variance) and after **1978** (95% quantile of the change point on the mean).
+We will split our data by leveraging the change points discovered in two sub-datasets: years **before** **1949** (5% quantile of the change point on the variance) and **after** **1978** (95% quantile of the change point on the mean).
+
+### After 1978
+
+We start our analysis with the years after 1978.
 
 The model is as follows:$$
 x_t :=\log(y_{t+1})-\log(y_t)
@@ -830,6 +840,8 @@ Those years indicate periods where the subsequent year experienced a noticeable 
 
 -   2019/2020: **Covid-19 Pandemic**, decrease in CO2 emissions.
 
+### Before 1949
+
 We will now repeat the same analysis for the years before 1949.
 
 ```{r}
@@ -865,7 +877,9 @@ $$
 \end{split}
 $$
 
-We choose the priors for $\mu$, and $p$ to be weakly informative, while for $\beta_1$ and $\beta_2$ we injected a strong bias toward values near zero (higher parameter of the exponential distribution)
+We choose the priors for $\mu$, and $p$ to be weakly informative, while for $\beta_1$ and $\beta_2$ we injected a strong bias toward values near zero (higher parameter of the exponential distribution).
+
+Oss: We are practicly telling the model that the data has high variance (as we can see from the plotted data) and it needs to learn a $\delta_t$ to classify the points with lower variance.
 
 ```{r}
 model4.string <-"model {
@@ -943,7 +957,7 @@ oo = ii[tauest < 0.2]      # Higher variance means a lower tau
 
 
 # Plot in the delta log domain
-plot(year_49[1:length(delta_logdata_49)], delta_logdata_49, main = "Delta log-co2 after 1978", ylab="Delta log-co2", xlab="Year")
+plot(year_49[1:length(delta_logdata_49)], delta_logdata_49, main = "Delta log-co2 before 1949", ylab="Delta log-co2", xlab="Year")
 lines(year_49[oo], delta_logdata_49[oo], type="p", col="red")
 
 # The lines / red points indicate months with high variance
@@ -975,13 +989,13 @@ The years with the most significant variance in CO2 emission trends are: 1913, 1
 
 Those years indicate periods where the subsequent year experienced a noticeable change in CO2 emissions (we analysed the delta of the data) and can be directly linked with major global economic phenomena:
 
--   1913: beginning of World War I (1914)
+-   1913: **Beginning of World War I** (1914)
 
--   1918/1919/1920: End of World War I (1918) and aftermath
+-   1918/1919/1920: **End of World War I** (1918) and aftermath
 
--   1930/1931: The Great Depression (1929–1939)
+-   1930/1931: **The Great Depression** (1929–1939)
 
--   1944: End of World War II (1945)
+-   1944: **End of World War II** (1945)
 
 **Disclaimer:** The years between 1900 and 1945 were troubled and a lot of significant events happened in that period. This makes the general variability between each year more accentuated and as such significant events are harder to spot.
 
@@ -990,6 +1004,8 @@ Those years indicate periods where the subsequent year experienced a noticeable 
 ```
 
 # Dataset 2
+
+We will continue our analysis by analyzing the impact of various factors on CO2 emissions in recent years.
 
 **Sources:**
 
@@ -1096,7 +1112,7 @@ legend("topleft", legend="Each colour represents a country", cex=0.7)
 
 ## Density & Exploratory data analysis
 
-We start our analysis by exploring the density of our dataset and visually representing the data in relation to CO2 emissions. This preliminary examination helps us understand the distribution and relationships within the data.
+We start our analysis by plotting the densities and visually representing the data in relation to CO2 emissions. This preliminary examination helps us understand the distribution and relationships within the data.
 
 ```{r}
 library(ggplot2)
@@ -1178,14 +1194,14 @@ The features with the highest correlation with CO2 emissions per capita (co2perc
 
 ## *Spike and slab prior*
 
-To perform variable selection we will use the Spike and Slab model.
+To determine the most impactful variables for our analysis, and perform varaible selection, we will employ a Bayesian approach using the Spike-and-Slab prior.
 
 The spike & slab prior for a linear regression model is
 
 $$ \begin{align*}   
-& \beta_j \mid \gamma_j \overset{ind}\sim (1-\gamma_j)\,\delta_{(0)} + \gamma_j\,\mathcal{N}\left(0,     \sigma^2_{\beta_j}\right), \\   
-& \gamma_j \mid \theta_j \overset{ind}\sim \mathcal{B}e\left(\theta_j\right), \\[5pt]   
-& \theta_{j} \overset{iid}\sim p\left(\theta_j\right), \end{align*} 
+ \beta_j \mid \gamma_j &\overset{ind}\sim (1-\gamma_j)\,\delta_{(0)} + \gamma_j\,\mathcal{N}\left(0,     \sigma^2_{\beta_j}\right), \\   
+ \gamma_j \mid \theta_j &\overset{ind}\sim \mathcal{B}e\left(\theta_j\right), \\[5pt]   
+ \theta_{j} &\overset{iid}\sim p\left(\theta_j\right), \end{align*} 
 $$
 
 where $\theta_j$ is a probability which determines whether $\beta_j$ is nonzero and hence whether the corresponding covariate will be included in the model.
@@ -1326,7 +1342,7 @@ For Lowcarbon_energy, the posterior mean of the beta parameter is negative, sugg
 
 ## Bayesian regressions
 
-From now on we will continue our analysis by focusing on the covariates GDP, EnergyUse and Lowcarbon Energy. (se vogliamo possiamo scartare lowcarbon energy) **(Gabri inventati qualcosa tu)**
+From now on we will continue our analysis by focusing on the covariates GDP, EnergyUse and Lowcarbon Energy.
 
 ### GDP and CO2 Emissions
 
@@ -1611,8 +1627,6 @@ Iceland's relatively low CO2 emissions can be attributed to its substantial use 
 
 Low-carbon energy is defined as the sum of nuclear and renewable sources. Intuitively it is reasonable to expect to find a negative relation with the CO2 emissions.
 
-(questo possiamo eliminarlo) o inventati qualcosa
-
 ```{r}
 
 # Exponential response
@@ -1634,7 +1648,7 @@ Low-carbon energy is defined as the sum of nuclear and renewable sources. Intui
 model3 <- textConnection("model{
   # likelihood
 	for (i in 1:N) {
-		Y[i] ~ dnorm(mu[i], inv.s)
+		Y[i] ~ dnorm(mu[i], inv.var)
 		# Y[i] ~ dexp(mu[i])
 		mu[i] = alpha + X[i] * beta
 	}
@@ -1642,7 +1656,8 @@ model3 <- textConnection("model{
 	# prior
 	alpha ~ dnorm(0, .001)
 	beta ~ dnorm(0, .001)
-	inv.s ~ dgamma(0.001, 0.001)
+	inv.var ~ dgamma(0.001, 0.001)
+	sigma2 <- 1/inv.var
 }")
 
 
@@ -1659,7 +1674,7 @@ dataList = list(Y=Y, X=X, N=length(Y))
 samples3 <- jags(model.file = model3,
                      data=dataList,
                      # inits=inits,
-                     parameters.to.save= c("alpha", "beta", "mu"),
+                     parameters.to.save= c("alpha", "beta", "mu", "sigma2"),
                      n.adapt=1000, n.iter=20000, n.chains = 2, n.burnin = 2000,
                      n.thin = 2)
 ```
@@ -1671,7 +1686,7 @@ samples3
 # Trace and density
 plot(samples3$samples[,c('alpha')], main="posterior alpha")
 plot(samples3$samples[,c('beta')], main="posterior beta")
-# plot(samples3$samples[,c('sigma2')], main="posterior sigma2")
+plot(samples3$samples[,c('sigma2')], main="posterior sigma2")
 ```
 
 ```{r}
