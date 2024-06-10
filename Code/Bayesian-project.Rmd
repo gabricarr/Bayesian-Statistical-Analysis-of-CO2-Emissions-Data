@@ -114,7 +114,7 @@ $$ where $\sigma_1^2, \sigma_2^2$ are unknown.
 The model is as follows: $$
 \begin{split}
 & y_t \sim \mathcal{N}(\mu_0,\sigma_t^2)\\
-& \sigma_t=\sigma_{1}^2 \{t < \tau \} + \sigma_2^2 \{ t \geq \tau\} \\
+& \sigma_t^2 = \sigma_{1}^2 \{t < \tau \} + \sigma_2^2 \{ t \geq \tau\} \\
 & \tau \sim \mathcal{U}(0,M) \\
 & \mu_0 \sim \mathcal{N}(0,100) \\
 & \frac{1}{\sigma_i^2}  \sim \mathcal{G}(0.001, 0.001)  \  &i \in [1, 2]
@@ -254,7 +254,7 @@ For the next analysis we will try to fit the data after the first shift (1951) w
 The model is as follows:$$
 \begin{split}
 & y_t  \stackrel{ind}{\sim} \mathcal{N}(\mu_t,\sigma_{0}^2)\\
-& \mu_t=m_{1} \{t < \tau \} + m_2 \{ t \geq \tau\} \\
+& \mu_t=\mu_1 \{t < \tau \} + \mu_2 \{ t \geq \tau\} \\
 & \tau \sim \mathcal{U}(0,M) \\
 & \mu_1 \sim \mathcal{N}(5,100) \\
 & \mu_2 \sim \mathcal{N}(0,100) \\
