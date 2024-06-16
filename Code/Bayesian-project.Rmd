@@ -1194,7 +1194,7 @@ The features with the highest correlation with CO2 emissions per capita (co2perc
 
 ## *Spike and slab prior*
 
-To determine the most impactful variables for our analysis, and perform varaible selection, we will employ a Bayesian approach using the Spike-and-Slab prior.
+To determine the most impactful variables for our analysis, and perform varaible selection, we will employ a Bayesian approach using the Spike-and-Slab prior on the normalized data.
 
 The spike & slab prior for a linear regression model is
 
@@ -1204,7 +1204,7 @@ $$ \begin{align*}
  \theta_{j} &\overset{iid}\sim p\left(\theta_j\right), \end{align*} 
 $$
 
-where $\theta_j$ is a probability which determines whether $\beta_j$ is nonzero and hence whether the corresponding covariate will be included in the model.
+where $\theta_j$ is a probability which determines whether $\beta_j$ is nonzero and hence whether the corresponding covariate will be included in the model and $\sigma^2_{\beta_j} = 1$.
 
 ```{r}
 library(rjags)
@@ -1654,8 +1654,8 @@ model3 <- textConnection("model{
 	}
 
 	# prior
-	alpha ~ dnorm(0, .001)
-	beta ~ dnorm(0, .001)
+	alpha ~ dnorm(0, .01)
+	beta ~ dnorm(0, .01)
 	inv.var ~ dgamma(0.001, 0.001)
 	sigma2 <- 1/inv.var
 }")
