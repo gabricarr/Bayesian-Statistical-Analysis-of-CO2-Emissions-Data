@@ -1204,7 +1204,7 @@ $$ \begin{align*}
  \theta_{j} &\overset{iid}\sim p\left(\theta_j\right), \end{align*} 
 $$
 
-where $\theta_j$ is a probability which determines whether $\beta_j$ is nonzero and hence whether the corresponding covariate will be included in the model and $\sigma^2_{\beta_j} = 1$.
+where $\theta_j$ is a probability which determines whether $\beta_j$ is nonzero and hence whether the corresponding covariate will be included in the model , $\sigma^2_{\beta_j} = 1$ and $p(\theta_j)$ is a uniform distribution.
 
 ```{r}
 library(rjags)
