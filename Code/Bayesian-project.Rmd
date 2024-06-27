@@ -865,7 +865,7 @@ plot(year_49[1:length(delta_logdata_49)], delta_logdata_49, ylab="Delta log-co2"
 plot(year_49[1:length(delta_logdata_49_p3)], delta_logdata_49_p3, ylab="Delta log-co2", main="Enchanced Delta log-co2 before 1949", xlab="Year")
 ```
 
-The general variance between datapoints is higher in this period. To obtain more extreme results we introduce a strong bias with respect to lower variance in the model and we change the priors to:
+The general variance between datapoints is higher in this period. To obtain more extreme results we introduce a strong bias with respect to higher variance in the model and we change the priors to:
 
 $$ 
 \begin{split} 
@@ -879,7 +879,7 @@ $$
 
 We choose the priors for $\mu$, and $p$ to be weakly informative, while for $\beta_1$ and $\beta_2$ we injected a strong bias toward values near zero (higher parameter of the exponential distribution).
 
-Oss: We are practicly telling the model that the data has high variance (as we can see from the plotted data) and it needs to learn a $\delta_t$ to classify the points with lower variance.
+Oss: We are practically telling the model that the data has high variance (as we can see from the plotted data) and it needs to learn a $\delta_t$ to classify the points with lower variance.
 
 ```{r}
 model4.string <-"model {
