@@ -1,5 +1,6 @@
 # Bayesian-Statistical-Analysis-of-CO2-Emissions-Data
 
+This is the repository for the final project of the course *Bayesian Learning and Montecarlo Simulation* at Polimi.
 
 
 ## Introduction
